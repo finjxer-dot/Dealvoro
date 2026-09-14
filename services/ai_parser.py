@@ -10,65 +10,100 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 SYSTEM_PROMPT = """
 Ты — анализатор поисковых запросов для Telegram-бота Dealvoro.
 
-Тебе передают:
-1. название/запрос товара;
-2. дополнительные требования пользователя.
+На входе:
+1. запрос пользователя о товаре;
+2. дополнительные требования.
 
-Твоя задача:
-- определить основной товар;
-- создать 2–4 поисковых варианта для поиска в разных языках и написаниях;
-- определить дополнительные требования;
-- создать 2–4 варианта написания каждого требования.
-
-НЕ обрабатывай:
-- минимальную цену;
-- максимальную цену;
-- валюту;
-- страну;
-- состояние товара.
-
-Эти параметры Dealvoro обрабатывает отдельно.
+Твоя задача — определить, какие признаки ОБЯЗАТЕЛЬНО должны присутствовать
+в найденном товаре.
 
 Верни строго JSON:
 
 {
   "product_query": "основной запрос",
   "search_terms": [
-    "вариант 1",
-    "вариант 2"
+    "полный вариант 1",
+    "полный вариант 2"
+  ],
+  "must_groups": [
+    ["nike"],
+    ["кроссовки", "кросівки", "sneakers"]
   ],
   "requirements": "требования или null",
   "requirement_terms": [
-    "вариант 1",
-    "вариант 2"
+    "мужские",
+    "чоловічі",
+    "men",
+    "men's"
+  ],
+  "exclude_terms": [
+    "шорты",
+    "шорти",
+    "shorts"
   ]
 }
 
-Правила для search_terms:
-- сохраняй бренд;
-- сохраняй модель;
-- сохраняй важные характеристики;
-- исправляй очевидные опечатки;
-- добавляй украинский вариант;
-- добавляй английский вариант, если он распространён;
-- не придумывай информацию;
-- обычно 2–4 варианта.
+ОЧЕНЬ ВАЖНО:
 
-Правила для requirement_terms:
-- сохраняй исходный смысл;
-- добавляй украинский вариант;
-- добавляй английский вариант, если он распространён;
+must_groups — это обязательные группы признаков.
+
+Каждая внутренняя группа означает:
+"должен совпасть хотя бы ОДИН вариант из этой группы".
+
+Например:
+
+[
+  ["nike"],
+  ["кроссовки", "кросівки", "sneakers"]
+]
+
+означает:
+
+Nike ОБЯЗАТЕЛЕН
+И
+кроссовки/кросівки/sneakers ОБЯЗАТЕЛЬНЫ.
+
+Если товар содержит только Nike, но это шорты — он НЕ подходит.
+
+Правила:
+
+- бренд выделяй отдельной обязательной группой;
+- тип товара выделяй отдельной обязательной группой;
+- важную модель также выделяй отдельной обязательной группой;
+- для каждого признака добавляй русские, украинские и английские варианты,
+  если они реально используются в каталогах;
 - исправляй очевидные опечатки;
-- не придумывай новые требования;
-- обычно 2–4 варианта.
+- не придумывай свойства и модели;
+- exclude_terms должен содержать ЯВНЫЕ альтернативные типы товара,
+  которые противоречат запросу;
+- для каждого exclude_terms обязательно добавляй варианты:
+  русский + украинский + английский, если они существуют;
+- requirements НЕ являются обязательными для базового поиска;
+- requirements используются отдельно для повышения соответствия;
+- цена, валюта, страна и состояние товара сюда НЕ включаются;
+- обычно достаточно 2–4 вариантов в каждой группе;
+- не создавай слишком широкие группы;
+- не добавляй в exclude_terms обычные слова, которые могут встречаться
+  у подходящего товара случайно.
+
+Примеры вариантов исключений:
+
+шорты:
+["шорты", "шорти", "shorts"]
+
+футболка:
+["футболка", "футболки", "t-shirt", "tshirt"]
+
+куртка:
+["куртка", "куртки", "jacket"]
+
+сандали:
+["сандали", "сандалі", "sandals"]
 
 Пример:
 
-Название:
-кросовки найк
-
-Требования:
-мужские
+Запрос:
+"кросовки найк"
 
 Результат:
 
@@ -79,14 +114,48 @@ SYSTEM_PROMPT = """
     "Nike кросівки",
     "Nike sneakers"
   ],
-  "requirements": "мужские",
-  "requirement_terms": [
-    "мужские",
-    "чоловічі",
-    "men",
-    "men's"
+  "must_groups": [
+    ["nike"],
+    ["кроссовки", "кросівки", "sneakers"]
+  ],
+  "requirements": null,
+  "requirement_terms": [],
+  "exclude_terms": [
+    "шорты",
+    "шорти",
+    "shorts",
+    "футболка",
+    "футболки",
+    "t-shirt",
+    "куртка",
+    "куртки",
+    "jacket",
+    "сандали",
+    "сандалі",
+    "sandals"
   ]
 }
+
+Если запрос содержит:
+"кросовки найк" + "мужские"
+
+то:
+
+requirements:
+"мужские"
+
+requirement_terms:
+[
+  "мужские",
+  "чоловічі",
+  "men",
+  "men's"
+]
+
+Важно:
+requirement_terms должны помогать определить соответствие товара,
+но отсутствие совпадения по requirement_terms само по себе не означает,
+что товар нужно исключить.
 """
 
 
@@ -101,14 +170,16 @@ def analyze_search_request(
         return {
             "product_query": product,
             "search_terms": [product],
+            "must_groups": [[product]],
             "requirements": requirements,
             "requirement_terms": (
                 [requirements] if requirements else []
             ),
+            "exclude_terms": [],
         }
 
     user_text = (
-        f"Название товара:\n{product}\n\n"
+        f"Запрос товара:\n{product}\n\n"
         f"Дополнительные требования:\n"
         f"{requirements if requirements else 'нет'}"
     )
@@ -145,6 +216,19 @@ def analyze_search_request(
                                 "minItems": 1,
                                 "maxItems": 4
                             },
+                            "must_groups": {
+                                "type": "array",
+                                "items": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "minItems": 1,
+                                    "maxItems": 4
+                                },
+                                "minItems": 1,
+                                "maxItems": 6
+                            },
                             "requirements": {
                                 "type": [
                                     "string",
@@ -158,12 +242,21 @@ def analyze_search_request(
                                 },
                                 "maxItems": 4
                             },
+                            "exclude_terms": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "maxItems": 8
+                            },
                         },
                         "required": [
                             "product_query",
                             "search_terms",
+                            "must_groups",
                             "requirements",
-                            "requirement_terms"
+                            "requirement_terms",
+                            "exclude_terms"
                         ],
                         "additionalProperties": False,
                     },
@@ -174,29 +267,55 @@ def analyze_search_request(
         result = json.loads(response.output_text)
 
         search_terms = [
-            term.strip()
+            str(term).strip()
             for term in result["search_terms"]
-            if isinstance(term, str) and term.strip()
+            if str(term).strip()
         ]
+
+        must_groups = []
+
+        for group in result["must_groups"]:
+            cleaned_group = [
+                str(term).strip()
+                for term in group
+                if str(term).strip()
+            ]
+
+            if cleaned_group:
+                must_groups.append(cleaned_group)
 
         requirement_terms = [
-            term.strip()
+            str(term).strip()
             for term in result["requirement_terms"]
-            if isinstance(term, str) and term.strip()
+            if str(term).strip()
         ]
 
-        if not search_terms:
-            search_terms = [product]
+        exclude_terms = []
+
+        for term in result["exclude_terms"]:
+            parts = (
+                str(term)
+                .replace('"', "")
+                .split(",")
+            )
+
+            for part in parts:
+                cleaned = part.strip()
+
+                if cleaned:
+                    exclude_terms.append(cleaned)
 
         return {
             "product_query": result["product_query"].strip(),
-            "search_terms": search_terms,
+            "search_terms": search_terms or [product],
+            "must_groups": must_groups or [[product]],
             "requirements": (
                 result["requirements"].strip()
                 if result["requirements"]
                 else None
             ),
             "requirement_terms": requirement_terms,
+            "exclude_terms": exclude_terms,
         }
 
     except Exception as error:
@@ -205,8 +324,10 @@ def analyze_search_request(
         return {
             "product_query": product,
             "search_terms": [product],
+            "must_groups": [[product]],
             "requirements": requirements,
             "requirement_terms": (
                 [requirements] if requirements else []
             ),
+            "exclude_terms": [],
         }

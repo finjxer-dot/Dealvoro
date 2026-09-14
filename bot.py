@@ -457,12 +457,28 @@ async def process_requirements(message: Message, state: FSMContext):
         requirements=requirements,
 )
 
-    product_query = ai_result["product_query"]
-    search_terms = ai_result["search_terms"]
-    must_groups = ai_result["must_groups"]
-    requirements = ai_result["requirements"]
-    requirement_terms = ai_result["requirement_terms"]
-    exclude_terms = ai_result["exclude_terms"]
+    product_query = ai_result.get("product_query", data["product"])
+    search_terms = ai_result.get("search_terms", [product_query])
+
+    must_groups = ai_result.get(
+            "must_groups",
+            [[product_query]]
+    )
+
+    equirements = ai_result.get(
+        "requirements",
+        requirements
+    )
+
+    requirement_terms = ai_result.get(
+        "requirement_terms",
+        [requirements] if requirements else []
+    )
+
+    exclude_terms = ai_result.get(
+        "exclude_terms",
+        []
+    )
 
     await state.update_data(
         product=product_query,
