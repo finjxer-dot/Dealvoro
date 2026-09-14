@@ -275,12 +275,22 @@ def search_products(
         ):
             continue
 
+        exclude_text = normalize(
+            " ".join(
+                [
+                    str(product.get("name", "")),
+                    str(product.get("category", "")),
+                ]
+            )
+        )
+
         if any(
-            normalize(term) in searchable_text
+            normalize(term) in exclude_text
             for term in exclude_terms
             if normalize(term)
         ):
             continue
+
         match_score = max(
             calculate_match_score(term, product)
             for term in search_terms
@@ -294,7 +304,7 @@ def search_products(
         # ---------------------------------
 
         if requirement_terms:
-            searchable_text = normalize(
+            requirement_text = normalize(
                 " ".join(
                     [
                         str(product.get("name", "")),
@@ -312,7 +322,7 @@ def search_products(
 
                 if (
                     normalized_requirement
-                    and normalized_requirement in searchable_text
+                    and normalized_requirement in requirement_text
                 ):
                     matched_requirements += 1
 
