@@ -137,6 +137,7 @@ def search_products(
     country="UA",
     condition="any",
     requirements=None,
+    search_terms=None,
 ):
     """
     Поиск товаров в каталоге Answear.
@@ -148,6 +149,15 @@ def search_products(
     products = load_products()
 
     results = []
+
+    if search_terms:
+        search_terms = [
+            term.strip()
+            for term in search_terms
+            if isinstance(term, str) and term.strip()
+        ]
+    else:
+        search_terms = [product_query]
 
     normalized_requirements = normalize(requirements or "")
 
@@ -188,9 +198,9 @@ def search_products(
         # ПОИСК
         # ---------------------------------
 
-        match_score = calculate_match_score(
-            product_query,
-            product,
+        match_score = max(
+            calculate_match_score(term, product)
+            for term in search_terms
         )
 
         if match_score == 0:
