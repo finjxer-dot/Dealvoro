@@ -1,3 +1,4 @@
+import gzip
 import json
 import re
 from pathlib import Path
@@ -5,7 +6,7 @@ from pathlib import Path
 
 # answear_products.json находится в корне Dealvoro
 PROJECT_ROOT = Path(__file__).parent.parent
-PRODUCTS_FILE = PROJECT_ROOT / "answear_products.json"
+PRODUCTS_FILE = PROJECT_ROOT / "answear_products.json.gz"
 
 
 def load_products():
@@ -14,7 +15,7 @@ def load_products():
             f"Файл каталога не найден: {PRODUCTS_FILE}"
         )
 
-    with open(PRODUCTS_FILE, "r", encoding="utf-8") as file:
+    with gzip.open(PRODUCTS_FILE, "rt", encoding="utf-8") as file:
         return json.load(file)
 
 
