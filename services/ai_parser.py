@@ -291,6 +291,93 @@ requirement_terms используются для повышения соотв�
 а не просто содержать отдельные слова из запроса.
 """
 
+def check_query_allowed(product: str) -> bool:
+    """
+    Проверяет, допустим ли запрос пользователя для Dealvoro.
+    True = можно продолжать поиск.
+    False = запрос запрещён.
+    """
+
+    if not os.getenv("OPENAI_API_KEY"):
+        # Если API недоступен, не ломаем бота.
+        return True
+
+    moderation_prompt = """
+Ты — модератор поисковых запросов интернет-магазина Dealvoro.
+
+Определи, относится ли запрос пользователя к запрещённым 18+ товарам
+или сексуальному контенту.
+
+ЗАПРЕЩЕНО:
+- секс-игрушки;
+- вибраторы;
+- фаллоимитаторы;
+- эротические товары;
+- интимные игрушки;
+- товары сексуального назначения;
+- другие явно предназначенные для сексуальной стимуляции товары.
+
+РАЗРЕШЕНО:
+- обычная одежда;
+- нижнее бельё без сексуального назначения;
+- косметика;
+- парфюмерия;
+- товары для здоровья без сексуального назначения;
+- обычные товары, даже если слово потенциально двусмысленное.
+
+Верни строго JSON:
+
+{
+  "allowed": true
+}
+
+или
+
+{
+  "allowed": false
+}
+
+Не оценивай ничего кроме категории запроса.
+"""
+
+    try:
+        response = client.responses.create(
+            model="gpt-5.4-mini",
+            input=[
+                {
+                    "role": "system",
+                    "content": moderation_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": product,
+                },
+            ],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "dealvoro_query_moderation",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "allowed": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": ["allowed"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+        )
+
+        result = json.loads(response.output_text)
+        return bool(result["allowed"])
+
+    except Exception as error:
+        print(f"Ошибка проверки запроса: {error}")
+        return True
 
 def analyze_search_request(
     product: str,

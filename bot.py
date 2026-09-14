@@ -2,6 +2,11 @@ import asyncio
 import html
 import os
 
+from services.ai_parser import (
+    analyze_search_request,
+    check_query_allowed,
+)
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
@@ -242,6 +247,17 @@ async def process_product(message: Message, state: FSMContext):
             "❌ Слишком короткий запрос.\n"
             "Напиши название товара ещё раз."
         )
+        return
+
+    allowed = check_query_allowed(product)
+
+    if not allowed:
+        await message.answer(
+            "❌ <b>Некорректный запрос.</b>\n\n"
+            "Этот тип товаров не поддерживается Dealvoro.",
+            parse_mode="HTML",
+        )
+        await state.clear()
         return
 
     await state.update_data(product=product)
