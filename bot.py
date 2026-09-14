@@ -17,6 +17,7 @@ from aiogram.types import (
 from dotenv import load_dotenv
 
 from services.search import search_products
+from services.ai_parser import analyze_search_request
 
 
 load_dotenv()
@@ -444,7 +445,25 @@ async def process_requirements(message: Message, state: FSMContext):
     if requirements.lower() in ["нет", "нету", "-", "no"]:
         requirements = None
 
-    await state.update_data(requirements=requirements)
+    data = await state.get_data()
+
+    await message.answer(
+        "🧠 <b>Анализирую запрос...</b>",
+        parse_mode="HTML",
+)
+
+    ai_result = analyze_search_request(
+        product=data["product"],
+        requirements=requirements,
+)
+
+    product_query = ai_result["product_query"]
+    requirements = ai_result["requirements"]
+
+    await state.update_data(
+        product=product_query,
+        requirements=requirements,
+)
 
     data = await state.get_data()
 
