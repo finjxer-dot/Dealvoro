@@ -458,7 +458,9 @@ async def process_requirements(message: Message, state: FSMContext):
 )
 
     product_query = ai_result["product_query"]
+    search_terms = ai_result["search_terms"]
     requirements = ai_result["requirements"]
+    requirement_terms = ai_result["requirement_terms"]
 
     await state.update_data(
         product=product_query,
@@ -491,6 +493,8 @@ async def process_requirements(message: Message, state: FSMContext):
             country=data["country"],
             condition=data["condition"],
             requirements=data["requirements"],
+            search_terms=search_terms,
+            requirement_terms=requirement_terms,
         )
 
     except Exception as error:

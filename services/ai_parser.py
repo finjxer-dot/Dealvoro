@@ -10,11 +10,15 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 SYSTEM_PROMPT = """
 Ты — анализатор поисковых запросов для Telegram-бота Dealvoro.
 
+Тебе передают:
+1. название/запрос товара;
+2. дополнительные требования пользователя.
+
 Твоя задача:
-1. определить основной поисковый запрос товара;
-2. создать несколько поисковых вариантов, которые помогут найти этот товар
-   в каталогах разных магазинов;
-3. выделить дополнительные требования пользователя.
+- определить основной товар;
+- создать 2–4 поисковых варианта для поиска в разных языках и написаниях;
+- определить дополнительные требования;
+- создать 2–4 варианта написания каждого требования.
 
 НЕ обрабатывай:
 - минимальную цену;
@@ -28,42 +32,61 @@ SYSTEM_PROMPT = """
 Верни строго JSON:
 
 {
-  "product_query": "основной поисковый запрос",
+  "product_query": "основной запрос",
   "search_terms": [
     "вариант 1",
     "вариант 2"
   ],
-  "requirements": "требования или null"
+  "requirements": "требования или null",
+  "requirement_terms": [
+    "вариант 1",
+    "вариант 2"
+  ]
 }
 
 Правила для search_terms:
-- включи исходный нормализованный вариант;
-- добавь украинский вариант, если он отличается от русского;
-- добавь английский вариант, если он распространён в каталогах;
+- сохраняй бренд;
+- сохраняй модель;
+- сохраняй важные характеристики;
 - исправляй очевидные опечатки;
-- не придумывай модель или характеристики;
-- обычно достаточно 2–4 вариантов;
-- каждый вариант должен описывать тот же самый товар;
-- не добавляй цену, валюту, страну или состояние товара.
+- добавляй украинский вариант;
+- добавляй английский вариант, если он распространён;
+- не придумывай информацию;
+- обычно 2–4 варианта.
+
+Правила для requirement_terms:
+- сохраняй исходный смысл;
+- добавляй украинский вариант;
+- добавляй английский вариант, если он распространён;
+- исправляй очевидные опечатки;
+- не придумывай новые требования;
+- обычно 2–4 варианта.
 
 Пример:
 
-Вход:
-"кроссовки Nike Air Max"
+Название:
+кросовки найк
 
-Возможный результат:
+Требования:
+мужские
+
+Результат:
+
 {
-  "product_query": "Nike Air Max",
+  "product_query": "Nike кроссовки",
   "search_terms": [
-    "кроссовки Nike Air Max",
-    "кросівки Nike Air Max",
-    "Nike Air Max sneakers"
+    "Nike кроссовки",
+    "Nike кросівки",
+    "Nike sneakers"
   ],
-  "requirements": null
+  "requirements": "мужские",
+  "requirement_terms": [
+    "мужские",
+    "чоловічі",
+    "men",
+    "men's"
+  ]
 }
-
-Если пользователь написал конкретную модель, бренд или характеристики,
-не теряй их.
 """
 
 
@@ -74,10 +97,14 @@ def analyze_search_request(
 
     if not os.getenv("OPENAI_API_KEY"):
         print("OPENAI_API_KEY не найден.")
+
         return {
             "product_query": product,
             "search_terms": [product],
             "requirements": requirements,
+            "requirement_terms": (
+                [requirements] if requirements else []
+            ),
         }
 
     user_text = (
@@ -124,11 +151,19 @@ def analyze_search_request(
                                     "null"
                                 ]
                             },
+                            "requirement_terms": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "maxItems": 4
+                            },
                         },
                         "required": [
                             "product_query",
                             "search_terms",
-                            "requirements"
+                            "requirements",
+                            "requirement_terms"
                         ],
                         "additionalProperties": False,
                     },
@@ -144,6 +179,12 @@ def analyze_search_request(
             if isinstance(term, str) and term.strip()
         ]
 
+        requirement_terms = [
+            term.strip()
+            for term in result["requirement_terms"]
+            if isinstance(term, str) and term.strip()
+        ]
+
         if not search_terms:
             search_terms = [product]
 
@@ -155,6 +196,7 @@ def analyze_search_request(
                 if result["requirements"]
                 else None
             ),
+            "requirement_terms": requirement_terms,
         }
 
     except Exception as error:
@@ -164,4 +206,7 @@ def analyze_search_request(
             "product_query": product,
             "search_terms": [product],
             "requirements": requirements,
+            "requirement_terms": (
+                [requirements] if requirements else []
+            ),
         }

@@ -138,6 +138,7 @@ def search_products(
     condition="any",
     requirements=None,
     search_terms=None,
+    requirement_terms=None,
 ):
     """
     Поиск товаров в каталоге Answear.
@@ -158,6 +159,15 @@ def search_products(
         ]
     else:
         search_terms = [product_query]
+
+    if requirement_terms:
+        requirement_terms = [
+            term.strip()
+            for term in requirement_terms
+            if isinstance(term, str) and term.strip()
+    ]
+    else:
+        requirement_terms = []
 
     normalized_requirements = normalize(requirements or "")
 
@@ -210,8 +220,7 @@ def search_products(
         # ДОПОЛНИТЕЛЬНЫЕ ТРЕБОВАНИЯ
         # ---------------------------------
 
-        if normalized_requirements:
-
+        if requirement_terms:
             searchable_text = normalize(
                 " ".join(
                     [
@@ -223,23 +232,20 @@ def search_products(
                 )
             )
 
-            requirement_words = get_words(
-                normalized_requirements
-            )
+            matched_requirements = 0
 
-            # Требуем, чтобы хотя бы часть требований
-            # присутствовала в информации о товаре.
-            if requirement_words:
-                matched_requirements = sum(
-                    1
-                    for word in requirement_words
-                    if word in searchable_text
-                )
+            for requirement in requirement_terms:
+                normalized_requirement = normalize(requirement)
 
-                if matched_requirements == 0:
-                    continue
+                if (
+                    normalized_requirement
+                    and normalized_requirement in searchable_text
+                ):
+                    matched_requirements += 1
 
-                match_score += matched_requirements * 10
+            # Требование влияет на рейтинг,
+            # но отсутствие совпадения НЕ удаляет товар.
+            match_score += matched_requirements * 15
 
         # ---------------------------------
         # СОЗДАЁМ ФОРМАТ ДЛЯ bot.py
