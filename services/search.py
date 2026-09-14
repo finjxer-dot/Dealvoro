@@ -128,6 +128,27 @@ def calculate_discount(product):
         ((old_price - price) / old_price) * 100
     )
 
+def matches_required_groups(product_text, must_groups):
+    normalized_text = normalize(product_text)
+
+    for group in must_groups:
+        group_matched = False
+
+        for term in group:
+            normalized_term = normalize(term)
+
+            if (
+                normalized_term
+                and normalized_term in normalized_text
+            ):
+                group_matched = True
+                break
+
+        if not group_matched:
+            return False
+
+    return True
+
 
 def search_products(
     product_query,
@@ -138,7 +159,9 @@ def search_products(
     condition="any",
     requirements=None,
     search_terms=None,
+    must_groups=None,
     requirement_terms=None,
+    exclude_terms=None,
 ):
     """
     Поиск товаров в каталоге Answear.
@@ -151,6 +174,8 @@ def search_products(
 
     results = []
 
+    seen_products = set()
+
     if search_terms:
         search_terms = [
             term.strip()
@@ -160,15 +185,40 @@ def search_products(
     else:
         search_terms = [product_query]
 
+    if must_groups:
+        cleaned_groups = []
+
+        for group in must_groups:
+            cleaned_group = [
+                term.strip()
+                for term in group
+                if isinstance(term, str) and term.strip()
+            ]
+
+            if cleaned_group:
+                cleaned_groups.append(cleaned_group)
+
+        must_groups = cleaned_groups
+    else:
+        must_groups = [[product_query]]
+
     if requirement_terms:
         requirement_terms = [
             term.strip()
             for term in requirement_terms
             if isinstance(term, str) and term.strip()
-    ]
+        ]
     else:
         requirement_terms = []
 
+    if exclude_terms:
+        exclude_terms = [
+            term.strip()
+            for term in exclude_terms
+            if isinstance(term, str) and term.strip()
+        ]
+    else:
+        exclude_terms = []
     normalized_requirements = normalize(requirements or "")
 
     for product in products:
@@ -208,6 +258,29 @@ def search_products(
         # ПОИСК
         # ---------------------------------
 
+        searchable_text = normalize(
+            " ".join(
+                [
+                    str(product.get("name", "")),
+                    str(product.get("description", "")),
+                    str(product.get("vendor", "")),
+                    str(product.get("category", "")),
+                ]
+            )
+        )
+
+        if not matches_required_groups(
+            searchable_text,
+            must_groups,
+        ):
+            continue
+
+        if any(
+            normalize(term) in searchable_text
+            for term in exclude_terms
+            if normalize(term)
+        ):
+            continue
         match_score = max(
             calculate_match_score(term, product)
             for term in search_terms
@@ -311,6 +384,19 @@ def search_products(
             "discount": discount,
         }
 
+        product_key = (
+            product_copy.get("url")
+            or (
+                product_copy.get("title"),
+                product_copy.get("price"),
+            )
+        )
+
+        if product_key in seen_products:
+            continue
+
+        seen_products.add(product_key)
+        
         results.append(product_copy)
 
     # ---------------------------------
