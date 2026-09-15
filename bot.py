@@ -21,10 +21,7 @@ from aiogram.types import (
 )
 from dotenv import load_dotenv
 
-from services.search import (
-    search_products,
-    preload_products,
-)
+from services.search import search_products
 
 
 load_dotenv()
@@ -962,31 +959,9 @@ async def settings(
 # =========================
 
 async def main():
-    print(
-        "Загрузка каталога перед запуском..."
-    )
+    print("Dealvoro запущен!")
 
-    # Один раз загружаем:
-    # Answear + TOUCH + INTERTOP.
-    #
-    # После этого пользовательские поиски
-    # используют каталог из памяти.
-    await asyncio.to_thread(
-        preload_products
-    )
-
-    print(
-        "Каталог готов!"
-    )
-
-    print(
-        "Dealvoro запущен!"
-    )
-
-    await dp.start_polling(
-        bot
-    )
-
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
