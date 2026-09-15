@@ -4,6 +4,3 @@ __pycache__/
 *.pyc
 .DS_Store
 answear_products.json
-
-# Store feed caches
-data/feeds/

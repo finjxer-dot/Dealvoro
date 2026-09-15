@@ -416,36 +416,25 @@ def download_feed(store, config):
 
 def load_store_products(store):
     """
-    Загружает магазин из кэша,
-    если кэш ещё не устарел.
-    Иначе скачивает новый фид.
+    Загружает готовый каталог магазина из .gz.
+
+    Если файла нет, скачивает XML и создаёт его.
     """
 
     config = FEEDS[store]
-
     cache = config["cache"]
 
     if cache.exists():
-
-        age = (
-            time.time()
-            - cache.stat().st_mtime
+        print(
+            f"{store}: загрузка готового каталога из .gz"
         )
 
-        if age < CACHE_TTL:
-
-            print(
-                f"{store}: "
-                f"используется кэш"
-            )
-
-            with gzip.open(
-                cache,
-                "rt",
-                encoding="utf-8",
-            ) as file:
-
-                return json.load(file)
+        with gzip.open(
+            cache,
+            "rt",
+            encoding="utf-8",
+        ) as file:
+            return json.load(file)
 
     return download_feed(
         store,
