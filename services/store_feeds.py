@@ -29,9 +29,20 @@ FEEDS = {
         "url_env": "TOUCH_FEED_URL",
         "cache": CACHE_DIR / "touch_products.json.gz",
     },
+
     "INTERTOP": {
         "url_env": "INTERTOP_FEED_URL",
         "cache": CACHE_DIR / "intertop_products.json.gz",
+    },
+
+    "iCases UA": {
+        "url_env": "ICASES_FEED_URL",
+        "cache": CACHE_DIR / "icases_products.json.gz",
+    },
+
+    "Будинок Іграшок UA": {
+        "url_env": "BUDYNOK_IGRASHOK_FEED_URL",
+        "cache": CACHE_DIR / "budynok_igrashok_products.json.gz",
     },
 }
 

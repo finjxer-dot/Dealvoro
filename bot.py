@@ -81,6 +81,7 @@ class SearchForm(StatesGroup):
     condition = State()
     requirements = State()
 
+
 # =========================================
 # ГЛАВНОЕ МЕНЮ
 # =========================================
@@ -423,7 +424,6 @@ async def find_product(
 ):
     await state.clear()
 
-    # Получаем сохранённые настройки пользователя
     settings = get_settings(
         message.from_user.id
     )
@@ -638,7 +638,7 @@ async def process_max_price(
         "Если требований нет — напиши <b>нет</b>.",
         parse_mode="HTML",
         reply_markup=ReplyKeyboardRemove(),
-)
+    )
 
 
 # =========================================
@@ -797,7 +797,7 @@ async def process_requirements(
 
     settings = get_settings(
         message.from_user.id
-)
+    )
 
     data["currency"] = settings.get(
         "currency",
@@ -873,9 +873,15 @@ async def process_requirements(
         [],
     )
 
+    audience = ai_result.get(
+        "audience",
+        "adult",
+    )
+
     await state.update_data(
         product=product_query,
         requirements=requirements_result,
+        audience=audience,
     )
 
     data = await state.get_data()
@@ -901,6 +907,7 @@ async def process_requirements(
             must_groups=must_groups,
             requirement_terms=requirement_terms,
             exclude_terms=exclude_terms,
+            audience=audience,
         )
 
     except Exception as error:
@@ -1449,6 +1456,11 @@ async def repeat_search(
             parse_mode="HTML",
         )
 
+        audience = ai_data.get(
+            "audience",
+            "adult",
+        )
+
         results = await asyncio.to_thread(
             search_products,
             product_query=ai_data.get(
@@ -1479,6 +1491,7 @@ async def repeat_search(
                 "exclude_terms",
                 [],
             ),
+            audience=audience,
         )
 
     except Exception as error:
