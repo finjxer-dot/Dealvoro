@@ -3,6 +3,8 @@ import json
 import re
 from pathlib import Path
 
+from services.store_feeds import load_additional_products
+
 
 # answear_products.json находится в корне Dealvoro
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -10,13 +12,33 @@ PRODUCTS_FILE = PROJECT_ROOT / "answear_products.json.gz"
 
 
 def load_products():
+    """
+    Загружает товары Answear и дополнительные магазины.
+    """
+
     if not PRODUCTS_FILE.exists():
         raise FileNotFoundError(
             f"Файл каталога не найден: {PRODUCTS_FILE}"
         )
 
-    with gzip.open(PRODUCTS_FILE, "rt", encoding="utf-8") as file:
-        return json.load(file)
+    with gzip.open(
+        PRODUCTS_FILE,
+        "rt",
+        encoding="utf-8",
+    ) as file:
+        answear_products = json.load(file)
+
+    additional_products = load_additional_products()
+
+    print(
+        "Каталог:",
+        len(answear_products),
+        "Answear +",
+        len(additional_products),
+        "других товаров",
+    )
+
+    return answear_products + additional_products
 
 
 def normalize(text):
@@ -29,19 +51,67 @@ def normalize(text):
 
     text = str(text).lower()
 
-    # Оставляем латиницу, кириллицу и цифры
-    text = re.sub(r"[^a-zа-яёіїєґ0-9]+", " ", text)
+    # Оставляем латиницу, кириллицу и цифры.
+    text = re.sub(
+        r"[^a-zа-яёіїєґ0-9]+",
+        " ",
+        text,
+    )
 
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(
+        r"\s+",
+        " ",
+        text,
+    ).strip()
 
 
 def get_words(text):
     return normalize(text).split()
 
 
+def get_product_title(product):
+    """
+    Возвращает название товара независимо от источника.
+
+    Answear:
+        name
+
+    TOUCH / INTERTOP:
+        title
+    """
+
+    return normalize(
+        product.get("name")
+        or product.get("title")
+        or ""
+    )
+
+
+def get_product_description(product):
+    return normalize(
+        product.get("description", "")
+    )
+
+
+def get_product_vendor(product):
+    return normalize(
+        product.get("vendor", "")
+    )
+
+
+def get_product_category(product):
+    return normalize(
+        product.get("category", "")
+    )
+
+
 def calculate_match_score(query, product):
     """
-    Оценивает, насколько товар соответствует запросу.
+    Базовая оценка соответствия поисковой фразы.
+
+    Поддерживает:
+    - Answear: name
+    - TOUCH / INTERTOP: title
     """
 
     query_words = get_words(query)
@@ -49,10 +119,10 @@ def calculate_match_score(query, product):
     if not query_words:
         return 0
 
-    name = normalize(product.get("name", ""))
-    description = normalize(product.get("description", ""))
-    vendor = normalize(product.get("vendor", ""))
-    category = normalize(product.get("category", ""))
+    name = get_product_title(product)
+    description = get_product_description(product)
+    vendor = get_product_vendor(product)
+    category = get_product_category(product)
 
     name_words = name.split()
 
@@ -60,34 +130,43 @@ def calculate_match_score(query, product):
 
     for word in query_words:
 
-        # Точное совпадение слова в названии
+        # Точное совпадение в названии.
         if word in name_words:
             score += 40
 
-        # Частичное совпадение в названии
-        elif any(word in name_word for name_word in name_words):
+        # Частичное совпадение в названии.
+        elif any(
+            word in name_word
+            for name_word in name_words
+        ):
             score += 25
 
-        # Совпадение с брендом
+        # Совпадение с брендом.
         elif word in vendor:
             score += 30
 
-        # Совпадение в описании
+        # Совпадение в описании.
         elif word in description:
             score += 10
 
-        # Совпадение в категории
+        # Совпадение в категории.
         elif word in category:
             score += 5
 
     normalized_query = normalize(query)
 
-    # Весь запрос встречается в названии
-    if normalized_query in name:
+    # Весь запрос встречается в названии.
+    if (
+        normalized_query
+        and normalized_query in name
+    ):
         score += 50
 
-    # Название товара начинается с запроса
-    if name.startswith(normalized_query):
+    # Название начинается с полного запроса.
+    if (
+        normalized_query
+        and name.startswith(normalized_query)
+    ):
         score += 20
 
     return score
@@ -95,59 +174,381 @@ def calculate_match_score(query, product):
 
 def calculate_deal_score(product):
     """
-    Рассчитывает Deal Score.
-
-    Для Answear используем скидку,
-    если есть old_price.
+    Рассчитывает Deal Score на основе скидки.
     """
 
-    price = float(product.get("price", 0))
+    try:
+        price = float(
+            product.get("price", 0)
+        )
+    except (TypeError, ValueError):
+        return 0
+
     old_price = product.get("old_price")
+
+    try:
+        old_price = (
+            float(old_price)
+            if old_price is not None
+            else None
+        )
+    except (TypeError, ValueError):
+        return 0
 
     if not old_price or old_price <= price:
         return 0
 
-    discount_percent = ((old_price - price) / old_price) * 100
+    discount_percent = (
+        (old_price - price)
+        / old_price
+    ) * 100
 
-    # Максимум 100 баллов
-    return min(round(discount_percent), 100)
+    return min(
+        round(discount_percent),
+        100,
+    )
 
 
 def calculate_discount(product):
     """
-    Возвращает размер скидки в процентах.
+    Возвращает скидку в процентах.
     """
 
-    price = float(product.get("price", 0))
+    try:
+        price = float(
+            product.get("price", 0)
+        )
+    except (TypeError, ValueError):
+        return 0
+
     old_price = product.get("old_price")
+
+    try:
+        old_price = (
+            float(old_price)
+            if old_price is not None
+            else None
+        )
+    except (TypeError, ValueError):
+        return 0
 
     if not old_price or old_price <= price:
         return 0
 
     return round(
-        ((old_price - price) / old_price) * 100
+        (
+            (old_price - price)
+            / old_price
+        ) * 100
     )
 
-def matches_required_groups(product_text, must_groups):
-    normalized_text = normalize(product_text)
+
+def term_matches_text(
+    term,
+    text,
+):
+    """
+    Проверяет совпадение термина с текстом.
+
+    Для одного слова используется точное совпадение
+    по отдельным словам.
+
+    Для фраз используется обычное вхождение.
+    """
+
+    normalized_term = normalize(term)
+
+    if not normalized_term or not text:
+        return False
+
+    term_words = normalized_term.split()
+
+    # Одно слово:
+    # только отдельный токен.
+    if len(term_words) == 1:
+        return normalized_term in text.split()
+
+    # Фраза:
+    # обычное вхождение.
+    return normalized_term in text
+
+
+def clean_groups(groups):
+    """
+    Очищает группы обязательных терминов.
+    """
+
+    if not groups:
+        return []
+
+    cleaned_groups = []
+
+    for group in groups:
+
+        if not isinstance(group, list):
+            continue
+
+        cleaned_group = []
+
+        for term in group:
+
+            if not isinstance(term, str):
+                continue
+
+            term = term.strip()
+
+            if not term:
+                continue
+
+            cleaned_group.append(term)
+
+        if cleaned_group:
+            cleaned_groups.append(
+                cleaned_group
+            )
+
+    return cleaned_groups
+
+
+def merge_required_groups(
+    must_groups,
+    requirement_groups=None,
+):
+    """
+    Объединяет основные обязательные группы
+    и отдельные обязательные группы требований.
+
+    Пример:
+
+    must_groups:
+        [
+            ["nike"],
+            ["футболка", "t-shirt"]
+        ]
+
+    requirement_groups:
+        [
+            ["мужская", "мужские", "men"],
+            ["черная", "чёрная", "black"]
+        ]
+
+    Результат:
+
+        [
+            ["nike"],
+            ["футболка", "t-shirt"],
+            ["мужская", "мужские", "men"],
+            ["черная", "чёрная", "black"]
+        ]
+
+    Каждая группа обязательна.
+    """
+
+    result = []
+
+    result.extend(
+        clean_groups(must_groups)
+    )
+
+    result.extend(
+        clean_groups(requirement_groups)
+    )
+
+    return result
+
+
+def matches_required_groups(
+    product,
+    must_groups,
+):
+    """
+    Проверяет все обязательные группы.
+
+    Каждая группа должна иметь хотя бы одно совпадение.
+
+    Все группы обязательны.
+
+    Для строгого поиска используются только:
+    - название
+    - бренд
+    - категория
+
+    Описание НЕ используется.
+
+    Это не позволяет словам из описания
+    превращать один тип товара в другой.
+    """
+
+    if not must_groups:
+        return True
+
+    title = get_product_title(product)
+    category = get_product_category(product)
+    vendor = get_product_vendor(product)
+
+    # Основная идентичность товара.
+    identity_text = " ".join(
+        [
+            title,
+            vendor,
+            category,
+        ]
+    ).strip()
 
     for group in must_groups:
+
+        if not isinstance(group, list):
+            return False
+
+        if not group:
+            return False
+
         group_matched = False
 
         for term in group:
+
+            if not isinstance(term, str):
+                continue
+
             normalized_term = normalize(term)
 
-            if (
-                normalized_term
-                and normalized_term in normalized_text
+            if not normalized_term:
+                continue
+
+            if term_matches_text(
+                normalized_term,
+                identity_text,
             ):
                 group_matched = True
                 break
 
+        # Все группы обязательны.
         if not group_matched:
             return False
 
     return True
+
+
+def contains_excluded_term(
+    product,
+    exclude_terms,
+):
+    """
+    Проверяет явно неподходящие типы/подкатегории.
+
+    Проверяем:
+    - название
+    - бренд
+    - категорию
+
+    Описание НЕ используется.
+    """
+
+    if not exclude_terms:
+        return False
+
+    title = get_product_title(product)
+    category = get_product_category(product)
+    vendor = get_product_vendor(product)
+
+    exclude_text = " ".join(
+        [
+            title,
+            vendor,
+            category,
+        ]
+    ).strip()
+
+    for term in exclude_terms:
+
+        if not isinstance(term, str):
+            continue
+
+        normalized_term = normalize(term)
+
+        if not normalized_term:
+            continue
+
+        if term_matches_text(
+            normalized_term,
+            exclude_text,
+        ):
+            return True
+
+    return False
+
+
+def calculate_relevance_score(
+    product,
+    must_groups,
+    requirement_terms=None,
+):
+    """
+    Рассчитывает релевантность товара.
+
+    Все must_groups уже являются обязательными.
+
+    Приоритет:
+    1. Совпадение в названии
+    2. Совпадение с брендом
+    3. Совпадение с категорией
+
+    Описание не используется для основного score.
+    """
+
+    title = get_product_title(product)
+    vendor = get_product_vendor(product)
+    category = get_product_category(product)
+
+    score = 0
+
+    for group in must_groups:
+
+        best_group_score = 0
+
+        for term in group:
+
+            normalized_term = normalize(term)
+
+            if not normalized_term:
+                continue
+
+            # Точное совпадение в названии.
+            if term_matches_text(
+                normalized_term,
+                title,
+            ):
+                best_group_score = max(
+                    best_group_score,
+                    50,
+                )
+
+            # Совпадение с брендом.
+            if term_matches_text(
+                normalized_term,
+                vendor,
+            ):
+                best_group_score = max(
+                    best_group_score,
+                    40,
+                )
+
+            # Совпадение с категорией.
+            if term_matches_text(
+                normalized_term,
+                category,
+            ):
+                best_group_score = max(
+                    best_group_score,
+                    30,
+                )
+
+        if best_group_score == 0:
+            return 0
+
+        score += best_group_score
+
+    return score
 
 
 def search_products(
@@ -162,64 +563,121 @@ def search_products(
     must_groups=None,
     requirement_terms=None,
     exclude_terms=None,
+    requirement_groups=None,
 ):
     """
-    Поиск товаров в каталоге Answear.
+    Ищет товары по объединённому каталогу:
 
-    country и condition пока принимаются
-    для совместимости с bot.py.
+    - Answear
+    - TOUCH
+    - INTERTOP
+
+    must_groups:
+        Основные обязательные признаки.
+
+    requirement_groups:
+        Отдельные обязательные группы требований.
+
+    requirement_terms:
+        Плоский список вариантов требований.
+        Используется для совместимости и хранения,
+        но НЕ превращается автоматически в одну группу.
+
+    Все группы из must_groups и requirement_groups
+    обязательны.
     """
 
     products = load_products()
 
     results = []
-
     seen_products = set()
 
+    # ---------------------------------
+    # SEARCH TERMS
+    # ---------------------------------
+
     if search_terms:
+
         search_terms = [
             term.strip()
             for term in search_terms
-            if isinstance(term, str) and term.strip()
+            if isinstance(term, str)
+            and term.strip()
         ]
+
     else:
-        search_terms = [product_query]
+
+        search_terms = [
+            product_query
+        ]
+
+    # ---------------------------------
+    # MUST GROUPS
+    # ---------------------------------
 
     if must_groups:
-        cleaned_groups = []
 
-        for group in must_groups:
-            cleaned_group = [
-                term.strip()
-                for term in group
-                if isinstance(term, str) and term.strip()
-            ]
+        must_groups = clean_groups(
+            must_groups
+        )
 
-            if cleaned_group:
-                cleaned_groups.append(cleaned_group)
-
-        must_groups = cleaned_groups
     else:
-        must_groups = [[product_query]]
+
+        must_groups = [
+            [product_query]
+        ]
+
+    # ---------------------------------
+    # REQUIREMENT GROUPS
+    # ---------------------------------
+
+    requirement_groups = clean_groups(
+        requirement_groups
+    )
+
+    # Объединяем обязательные группы.
+    required_groups = merge_required_groups(
+        must_groups,
+        requirement_groups,
+    )
+
+    # ---------------------------------
+    # REQUIREMENT TERMS
+    # ---------------------------------
 
     if requirement_terms:
+
         requirement_terms = [
             term.strip()
             for term in requirement_terms
-            if isinstance(term, str) and term.strip()
+            if isinstance(term, str)
+            and term.strip()
         ]
+
     else:
+
         requirement_terms = []
 
+    # ---------------------------------
+    # EXCLUDE TERMS
+    # ---------------------------------
+
     if exclude_terms:
+
         exclude_terms = [
             term.strip()
             for term in exclude_terms
-            if isinstance(term, str) and term.strip()
+            if isinstance(term, str)
+            and term.strip()
         ]
+
     else:
+
         exclude_terms = []
-    normalized_requirements = normalize(requirements or "")
+
+    # ---------------------------------
+    # ПОИСК
+    # ---------------------------------
 
     for product in products:
 
@@ -227,7 +685,12 @@ def search_products(
         # ВАЛЮТА
         # ---------------------------------
 
-        if product.get("currency") != currency:
+        product_currency = (
+            product.get("currency")
+            or product.get("currencyId")
+        )
+
+        if product_currency != currency:
             continue
 
         # ---------------------------------
@@ -235,179 +698,232 @@ def search_products(
         # ---------------------------------
 
         try:
-            price = float(product.get("price", 0))
-        except (TypeError, ValueError):
+
+            price = float(
+                product.get(
+                    "price",
+                    0,
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+
             continue
 
         if price < min_price:
             continue
 
-        if max_price is not None and price > max_price:
+        if (
+            max_price is not None
+            and price > max_price
+        ):
             continue
 
         # ---------------------------------
         # СОСТОЯНИЕ
         # ---------------------------------
 
-        # Answear — каталог новых товаров.
-        # Поэтому "Б/у" здесь пока ничего не найдёт.
+        # Полноценный поиск б/у пока
+        # не подключён к каталогам.
         if condition == "used":
             continue
 
         # ---------------------------------
-        # ПОИСК
+        # ОБЯЗАТЕЛЬНЫЕ ГРУППЫ
         # ---------------------------------
 
-        searchable_text = normalize(
-            " ".join(
-                [
-                    str(product.get("name", "")),
-                    str(product.get("description", "")),
-                    str(product.get("vendor", "")),
-                    str(product.get("category", "")),
-                ]
-            )
-        )
-
         if not matches_required_groups(
-            searchable_text,
-            must_groups,
+            product,
+            required_groups,
         ):
             continue
 
-        exclude_text = normalize(
-            " ".join(
-                [
-                    str(product.get("name", "")),
-                    str(product.get("category", "")),
-                ]
-            )
-        )
+        # ---------------------------------
+        # ИСКЛЮЧЕНИЯ
+        # ---------------------------------
 
-        if any(
-            normalize(term) in exclude_text
-            for term in exclude_terms
-            if normalize(term)
+        if contains_excluded_term(
+            product,
+            exclude_terms,
         ):
             continue
 
-        match_score = max(
-            calculate_match_score(term, product)
-            for term in search_terms
+        # ---------------------------------
+        # RELEVANCE SCORE
+        # ---------------------------------
+
+        match_score = calculate_relevance_score(
+            product,
+            required_groups,
+            requirement_terms,
         )
 
         if match_score == 0:
             continue
 
         # ---------------------------------
-        # ДОПОЛНИТЕЛЬНЫЕ ТРЕБОВАНИЯ
+        # SEARCH TERM BONUS
         # ---------------------------------
 
-        if requirement_terms:
-            requirement_text = normalize(
-                " ".join(
-                    [
-                        str(product.get("name", "")),
-                        str(product.get("description", "")),
-                        str(product.get("vendor", "")),
-                        str(product.get("category", "")),
-                    ]
+        search_term_score = 0
+
+        title = get_product_title(
+            product
+        )
+
+        description = get_product_description(
+            product
+        )
+
+        full_search_text = " ".join(
+            [
+                title,
+                description,
+            ]
+        ).strip()
+
+        for term in search_terms:
+
+            normalized_term = normalize(term)
+
+            if not normalized_term:
+                continue
+
+            # Полная поисковая фраза в названии.
+            if (
+                normalized_term
+                in title
+            ):
+
+                search_term_score = max(
+                    search_term_score,
+                    20,
                 )
-            )
 
-            matched_requirements = 0
+            # Полная фраза в названии + описании.
+            elif (
+                normalized_term
+                in full_search_text
+            ):
 
-            for requirement in requirement_terms:
-                normalized_requirement = normalize(requirement)
+                search_term_score = max(
+                    search_term_score,
+                    5,
+                )
 
-                if (
-                    normalized_requirement
-                    and normalized_requirement in requirement_text
-                ):
-                    matched_requirements += 1
-
-            # Требование влияет на рейтинг,
-            # но отсутствие совпадения НЕ удаляет товар.
-            match_score += matched_requirements * 15
+        match_score += search_term_score
 
         # ---------------------------------
-        # СОЗДАЁМ ФОРМАТ ДЛЯ bot.py
+        # СКИДКА / DEAL SCORE
         # ---------------------------------
 
-        old_price = product.get("old_price")
+        old_price = product.get(
+            "old_price"
+        )
 
-        discount = calculate_discount(product)
-        deal_score = calculate_deal_score(product)
+        discount = calculate_discount(
+            product
+        )
+
+        deal_score = calculate_deal_score(
+            product
+        )
+
+        # ---------------------------------
+        # ЕДИНЫЙ ФОРМАТ ТОВАРА
+        # ---------------------------------
+
+        title = (
+            product.get("name")
+            or product.get("title")
+            or "Без названия"
+        )
+
+        store = (
+            product.get("store")
+            or "Answear"
+        )
 
         product_copy = {
-            "title": product.get(
-                "name",
-                "Без названия"
+            "title": title,
+            "store": store,
+            "rating": product.get(
+                "rating"
             ),
-
-            "store": "Answear",
-
-            "rating": None,
-
-            "reviews": None,
-
+            "reviews": product.get(
+                "reviews"
+            ),
             "price": price,
-
             "old_price": old_price,
-
-            "currency": product.get(
-                "currency",
-                currency
+            "currency": (
+                product.get("currency")
+                or currency
             ),
-
-            "condition": "new",
-
+            "condition": (
+                product.get("condition")
+                or "new"
+            ),
             "description": product.get(
                 "description",
-                ""
+                "",
             ),
-
             "vendor": product.get(
                 "vendor",
-                ""
+                "",
             ),
-
             "category": product.get(
                 "category",
-                ""
+                "",
             ),
-
             "picture": product.get(
                 "picture",
-                ""
+                "",
             ),
-
             "url": product.get(
                 "url",
-                ""
+                "",
             ),
-
             "match_score": match_score,
-
             "deal_score": deal_score,
-
             "discount": discount,
         }
 
-        product_key = (
-            product_copy.get("url")
-            or (
-                product_copy.get("title"),
-                product_copy.get("price"),
-            )
+        # ---------------------------------
+        # УДАЛЕНИЕ ДУБЛИКАТОВ
+        # ---------------------------------
+
+        url = product_copy.get(
+            "url"
         )
+
+        if url:
+
+            product_key = (
+                store,
+                url,
+            )
+
+        else:
+
+            product_key = (
+                store,
+                normalize(title),
+                price,
+            )
 
         if product_key in seen_products:
             continue
 
-        seen_products.add(product_key)
-        
-        results.append(product_copy)
+        seen_products.add(
+            product_key
+        )
+
+        results.append(
+            product_copy
+        )
 
     # ---------------------------------
     # СОРТИРОВКА
@@ -415,9 +931,24 @@ def search_products(
 
     results.sort(
         key=lambda item: (
-            item["match_score"],
-            item["deal_score"],
-            -item["price"],
+            item.get(
+                "match_score",
+                0,
+            ),
+            item.get(
+                "deal_score",
+                0,
+            ),
+            item.get(
+                "discount",
+                0,
+            ),
+            -float(
+                item.get(
+                    "price",
+                    0,
+                )
+            ),
         ),
         reverse=True,
     )
