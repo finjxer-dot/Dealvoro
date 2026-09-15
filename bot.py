@@ -21,18 +21,27 @@ from aiogram.types import (
 )
 from dotenv import load_dotenv
 
-from services.search import search_products
-from services.ai_parser import analyze_search_request
+from services.search import (
+    search_products,
+    preload_products,
+)
 
 
 load_dotenv()
 
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN не найден в .env")
+    raise ValueError(
+        "BOT_TOKEN не найден в .env"
+    )
 
-bot = Bot(token=BOT_TOKEN)
+
+bot = Bot(
+    token=BOT_TOKEN
+)
+
 dp = Dispatcher()
 
 
@@ -57,15 +66,25 @@ class SearchForm(StatesGroup):
 main_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [
-            KeyboardButton(text="🛒 Найти товар"),
-            KeyboardButton(text="📋 Мои поиски"),
+            KeyboardButton(
+                text="🛒 Найти товар"
+            ),
+            KeyboardButton(
+                text="📋 Мои поиски"
+            ),
         ],
         [
-            KeyboardButton(text="🔔 Отслеживание цен"),
-            KeyboardButton(text="⭐ Избранное"),
+            KeyboardButton(
+                text="🔔 Отслеживание цен"
+            ),
+            KeyboardButton(
+                text="⭐ Избранное"
+            ),
         ],
         [
-            KeyboardButton(text="⚙️ Настройки"),
+            KeyboardButton(
+                text="⚙️ Настройки"
+            ),
         ],
     ],
     resize_keyboard=True,
@@ -79,11 +98,17 @@ main_keyboard = ReplyKeyboardMarkup(
 currency_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [
-            KeyboardButton(text="₴ UAH"),
-            KeyboardButton(text="$ USD"),
+            KeyboardButton(
+                text="₴ UAH"
+            ),
+            KeyboardButton(
+                text="$ USD"
+            ),
         ],
         [
-            KeyboardButton(text="€ EUR"),
+            KeyboardButton(
+                text="€ EUR"
+            ),
         ],
     ],
     resize_keyboard=True,
@@ -94,11 +119,17 @@ currency_keyboard = ReplyKeyboardMarkup(
 condition_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [
-            KeyboardButton(text="🆕 Новый"),
-            KeyboardButton(text="♻️ Б/у"),
+            KeyboardButton(
+                text="🆕 Новый"
+            ),
+            KeyboardButton(
+                text="♻️ Б/у"
+            ),
         ],
         [
-            KeyboardButton(text="📦 Любое"),
+            KeyboardButton(
+                text="📦 Любое"
+            ),
         ],
     ],
     resize_keyboard=True,
@@ -109,7 +140,9 @@ condition_keyboard = ReplyKeyboardMarkup(
 country_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [
-            KeyboardButton(text="🇺🇦 Украина"),
+            KeyboardButton(
+                text="🇺🇦 Украина"
+            ),
         ],
     ],
     resize_keyboard=True,
@@ -128,7 +161,10 @@ def condition_name(condition: str) -> str:
         "any": "Любое",
     }
 
-    return names.get(condition, "Не указано")
+    return names.get(
+        condition,
+        "Не указано",
+    )
 
 
 def currency_symbol(currency: str) -> str:
@@ -138,7 +174,10 @@ def currency_symbol(currency: str) -> str:
         "EUR": "€",
     }
 
-    return symbols.get(currency, currency)
+    return symbols.get(
+        currency,
+        currency,
+    )
 
 
 def clean_url(url: str) -> str:
@@ -153,8 +192,15 @@ def clean_url(url: str) -> str:
 
     url = url.strip()
 
-    if url.startswith("[") and "](" in url and url.endswith(")"):
-        url = url.split("](", 1)[1][:-1]
+    if (
+        url.startswith("[")
+        and "](" in url
+        and url.endswith(")")
+    ):
+        url = url.split(
+            "](",
+            1,
+        )[1][:-1]
 
     return url
 
@@ -162,14 +208,21 @@ def clean_url(url: str) -> str:
 def format_price(price: float) -> str:
     """
     Красивое отображение цены:
+
     3499 -> 3 499
     24999 -> 24 999
     """
 
     if float(price).is_integer():
-        return f"{int(price):,}".replace(",", " ")
+        return f"{int(price):,}".replace(
+            ",",
+            " ",
+        )
 
-    return f"{price:,.2f}".replace(",", " ")
+    return f"{price:,.2f}".replace(
+        ",",
+        " ",
+    )
 
 
 def create_product_keyboard(url: str):
@@ -195,7 +248,10 @@ def create_product_keyboard(url: str):
 # =========================
 
 @dp.message(CommandStart())
-async def start(message: Message, state: FSMContext):
+async def start(
+    message: Message,
+    state: FSMContext,
+):
     await state.clear()
 
     await message.answer(
@@ -211,10 +267,18 @@ async def start(message: Message, state: FSMContext):
 # НАЧАЛО ПОИСКА
 # =========================
 
-@dp.message(F.text == "🛒 Найти товар")
-async def find_product(message: Message, state: FSMContext):
+@dp.message(
+    F.text == "🛒 Найти товар"
+)
+async def find_product(
+    message: Message,
+    state: FSMContext,
+):
     await state.clear()
-    await state.set_state(SearchForm.product)
+
+    await state.set_state(
+        SearchForm.product
+    )
 
     await message.answer(
         "🛒 <b>Что ты хочешь найти?</b>\n\n"
@@ -232,8 +296,13 @@ async def find_product(message: Message, state: FSMContext):
 # ТОВАР
 # =========================
 
-@dp.message(SearchForm.product)
-async def process_product(message: Message, state: FSMContext):
+@dp.message(
+    SearchForm.product
+)
+async def process_product(
+    message: Message,
+    state: FSMContext,
+):
     if not message.text:
         await message.answer(
             "❌ Напиши название товара текстом."
@@ -249,19 +318,30 @@ async def process_product(message: Message, state: FSMContext):
         )
         return
 
-    allowed = check_query_allowed(product)
+    # AI-модерация:
+    # проверяем, является ли запрос
+    # товарным и разрешённым.
+    allowed = check_query_allowed(
+        product
+    )
 
     if not allowed:
         await message.answer(
             "❌ <b>Некорректный запрос.</b>\n\n"
-            "Этот тип товаров не поддерживается Dealvoro.",
+            "Этот тип запросов не поддерживается Dealvoro.",
             parse_mode="HTML",
         )
+
         await state.clear()
         return
 
-    await state.update_data(product=product)
-    await state.set_state(SearchForm.min_price)
+    await state.update_data(
+        product=product
+    )
+
+    await state.set_state(
+        SearchForm.min_price
+    )
 
     await message.answer(
         "💰 <b>Минимальная цена</b>\n\n"
@@ -275,13 +355,25 @@ async def process_product(message: Message, state: FSMContext):
 # МИНИМАЛЬНАЯ ЦЕНА
 # =========================
 
-@dp.message(SearchForm.min_price)
-async def process_min_price(message: Message, state: FSMContext):
+@dp.message(
+    SearchForm.min_price
+)
+async def process_min_price(
+    message: Message,
+    state: FSMContext,
+):
     if not message.text:
-        await message.answer("❌ Введи цену числом.")
+        await message.answer(
+            "❌ Введи цену числом."
+        )
         return
 
-    text = message.text.strip().replace(",", ".").replace(" ", "")
+    text = (
+        message.text
+        .strip()
+        .replace(",", ".")
+        .replace(" ", "")
+    )
 
     try:
         min_price = float(text)
@@ -297,8 +389,13 @@ async def process_min_price(message: Message, state: FSMContext):
         )
         return
 
-    await state.update_data(min_price=min_price)
-    await state.set_state(SearchForm.max_price)
+    await state.update_data(
+        min_price=min_price
+    )
+
+    await state.set_state(
+        SearchForm.max_price
+    )
 
     await message.answer(
         "💰 <b>Максимальная цена</b>\n\n"
@@ -311,13 +408,25 @@ async def process_min_price(message: Message, state: FSMContext):
 # МАКСИМАЛЬНАЯ ЦЕНА
 # =========================
 
-@dp.message(SearchForm.max_price)
-async def process_max_price(message: Message, state: FSMContext):
+@dp.message(
+    SearchForm.max_price
+)
+async def process_max_price(
+    message: Message,
+    state: FSMContext,
+):
     if not message.text:
-        await message.answer("❌ Введи цену числом.")
+        await message.answer(
+            "❌ Введи цену числом."
+        )
         return
 
-    text = message.text.strip().replace(",", ".").replace(" ", "")
+    text = (
+        message.text
+        .strip()
+        .replace(",", ".")
+        .replace(" ", "")
+    )
 
     try:
         max_price = float(text)
@@ -343,8 +452,13 @@ async def process_max_price(message: Message, state: FSMContext):
         )
         return
 
-    await state.update_data(max_price=max_price)
-    await state.set_state(SearchForm.currency)
+    await state.update_data(
+        max_price=max_price
+    )
+
+    await state.set_state(
+        SearchForm.currency
+    )
 
     await message.answer(
         "💵 <b>Выбери валюту</b>",
@@ -357,15 +471,22 @@ async def process_max_price(message: Message, state: FSMContext):
 # ВАЛЮТА
 # =========================
 
-@dp.message(SearchForm.currency)
-async def process_currency(message: Message, state: FSMContext):
+@dp.message(
+    SearchForm.currency
+)
+async def process_currency(
+    message: Message,
+    state: FSMContext,
+):
     currency_map = {
         "₴ UAH": "UAH",
         "$ USD": "USD",
         "€ EUR": "EUR",
     }
 
-    currency = currency_map.get(message.text)
+    currency = currency_map.get(
+        message.text
+    )
 
     if not currency:
         await message.answer(
@@ -374,8 +495,13 @@ async def process_currency(message: Message, state: FSMContext):
         )
         return
 
-    await state.update_data(currency=currency)
-    await state.set_state(SearchForm.country)
+    await state.update_data(
+        currency=currency
+    )
+
+    await state.set_state(
+        SearchForm.country
+    )
 
     await message.answer(
         "🇺🇦 <b>Выбери страну поиска</b>",
@@ -388,8 +514,13 @@ async def process_currency(message: Message, state: FSMContext):
 # СТРАНА
 # =========================
 
-@dp.message(SearchForm.country)
-async def process_country(message: Message, state: FSMContext):
+@dp.message(
+    SearchForm.country
+)
+async def process_country(
+    message: Message,
+    state: FSMContext,
+):
     if message.text != "🇺🇦 Украина":
         await message.answer(
             "❌ Пожалуйста, выбери страну кнопкой.",
@@ -397,8 +528,13 @@ async def process_country(message: Message, state: FSMContext):
         )
         return
 
-    await state.update_data(country="UA")
-    await state.set_state(SearchForm.condition)
+    await state.update_data(
+        country="UA"
+    )
+
+    await state.set_state(
+        SearchForm.condition
+    )
 
     await message.answer(
         "📦 <b>Какое состояние товара тебе нужно?</b>",
@@ -411,15 +547,22 @@ async def process_country(message: Message, state: FSMContext):
 # СОСТОЯНИЕ
 # =========================
 
-@dp.message(SearchForm.condition)
-async def process_condition(message: Message, state: FSMContext):
+@dp.message(
+    SearchForm.condition
+)
+async def process_condition(
+    message: Message,
+    state: FSMContext,
+):
     condition_map = {
         "🆕 Новый": "new",
         "♻️ Б/у": "used",
         "📦 Любое": "any",
     }
 
-    condition = condition_map.get(message.text)
+    condition = condition_map.get(
+        message.text
+    )
 
     if not condition:
         await message.answer(
@@ -428,8 +571,13 @@ async def process_condition(message: Message, state: FSMContext):
         )
         return
 
-    await state.update_data(condition=condition)
-    await state.set_state(SearchForm.requirements)
+    await state.update_data(
+        condition=condition
+    )
+
+    await state.set_state(
+        SearchForm.requirements
+    )
 
     await message.answer(
         "📝 <b>Есть дополнительные требования?</b>\n\n"
@@ -448,8 +596,13 @@ async def process_condition(message: Message, state: FSMContext):
 # ПОИСК ТОВАРОВ
 # =========================
 
-@dp.message(SearchForm.requirements)
-async def process_requirements(message: Message, state: FSMContext):
+@dp.message(
+    SearchForm.requirements
+)
+async def process_requirements(
+    message: Message,
+    state: FSMContext,
+):
     if not message.text:
         await message.answer(
             "❌ Напиши требования текстом или напиши «нет»."
@@ -458,7 +611,12 @@ async def process_requirements(message: Message, state: FSMContext):
 
     requirements = message.text.strip()
 
-    if requirements.lower() in ["нет", "нету", "-", "no"]:
+    if requirements.lower() in [
+        "нет",
+        "нету",
+        "-",
+        "no",
+    ]:
         requirements = None
 
     data = await state.get_data()
@@ -466,40 +624,65 @@ async def process_requirements(message: Message, state: FSMContext):
     await message.answer(
         "🧠 <b>Анализирую запрос...</b>",
         parse_mode="HTML",
-)
-
-    ai_result = analyze_search_request(
-        product=data["product"],
-        requirements=requirements,
-)
-
-    product_query = ai_result.get("product_query", data["product"])
-    search_terms = ai_result.get("search_terms", [product_query])
-
-    must_groups = ai_result.get(
-            "must_groups",
-            [[product_query]]
     )
 
-    equirements = ai_result.get(
+    try:
+        ai_result = analyze_search_request(
+            product=data["product"],
+            requirements=requirements,
+        )
+
+    except Exception as error:
+        print(
+            f"Ошибка AI-анализа: {error}"
+        )
+
+        await message.answer(
+            "❌ <b>Не удалось проанализировать запрос.</b>\n\n"
+            "Попробуй ещё раз.",
+            parse_mode="HTML",
+            reply_markup=main_keyboard,
+        )
+
+        await state.clear()
+        return
+
+    product_query = ai_result.get(
+        "product_query",
+        data["product"],
+    )
+
+    search_terms = ai_result.get(
+        "search_terms",
+        [product_query],
+    )
+
+    must_groups = ai_result.get(
+        "must_groups",
+        [[product_query]],
+    )
+
+    requirements_result = ai_result.get(
         "requirements",
-        requirements
+        requirements,
     )
 
     requirement_terms = ai_result.get(
         "requirement_terms",
-        [requirements] if requirements else []
+        [requirements]
+        if requirements
+        else [],
     )
 
     exclude_terms = ai_result.get(
         "exclude_terms",
-        []
+        [],
     )
 
     await state.update_data(
         product=product_query,
-        requirements=requirements,
-)
+        requirements=requirements_result,
+    )
 
     data = await state.get_data()
 
@@ -509,24 +692,24 @@ async def process_requirements(message: Message, state: FSMContext):
 
     await message.answer(
         "🔎 <b>Ищу подходящие предложения...</b>\n\n"
-        "⏳ Проверяю товары по твоим параметрам."
-        ,
+        "⏳ Проверяю товары по твоим параметрам.",
         parse_mode="HTML",
     )
 
     # ---------------------------------
-    # ЗАПУСК ПОИСКОВОГО ДВИЖКА
+    # ПОИСК В ОТДЕЛЬНОМ ПОТОКЕ
     # ---------------------------------
 
     try:
-        results = search_products(
+        results = await asyncio.to_thread(
+            search_products,
             product_query=product_query,
             min_price=data["min_price"],
             max_price=data["max_price"],
             currency=data["currency"],
             country=data["country"],
             condition=data["condition"],
-            requirements=requirements,
+            requirements=requirements_result,
             search_terms=search_terms,
             must_groups=must_groups,
             requirement_terms=requirement_terms,
@@ -534,7 +717,9 @@ async def process_requirements(message: Message, state: FSMContext):
         )
 
     except Exception as error:
-        print(f"Ошибка поиска: {error}")
+        print(
+            f"Ошибка поиска: {error}"
+        )
 
         await message.answer(
             "❌ <b>Произошла ошибка при поиске.</b>\n\n"
@@ -570,7 +755,9 @@ async def process_requirements(message: Message, state: FSMContext):
 
     displayed_results = results[:5]
 
-    symbol = currency_symbol(data["currency"])
+    symbol = currency_symbol(
+        data["currency"]
+    )
 
     await message.answer(
         f"🔎 <b>Найдено предложений: {len(results)}</b>\n\n"
@@ -582,37 +769,84 @@ async def process_requirements(message: Message, state: FSMContext):
     # ВЫВОД ТОВАРОВ
     # ---------------------------------
 
-    for index, product in enumerate(displayed_results, start=1):
+    for index, product in enumerate(
+        displayed_results,
+        start=1,
+    ):
 
-        title = html.escape(str(product.get("title", "Без названия")))
-        store = html.escape(str(product.get("store", "Неизвестный магазин")))
+        title = html.escape(
+            str(
+                product.get(
+                    "title",
+                    "Без названия",
+                )
+            )
+        )
 
-        rating = product.get("rating")
-        reviews = product.get("reviews")
+        store = html.escape(
+            str(
+                product.get(
+                    "store",
+                    "Неизвестный магазин",
+                )
+            )
+        )
+
+        rating = product.get(
+            "rating"
+        )
+
+        reviews = product.get(
+            "reviews"
+        )
 
         rating_text = (
             f"{rating}/5"
             if rating is not None
             else "Нет доступа к информации"
-)
+        )
 
         reviews_text = (
             f"{reviews:,}"
             if reviews is not None
             else "Нет доступа к информации"
-)
+        )
 
-        price = product.get("price", 0)
+        price = product.get(
+            "price",
+            0,
+        )
 
-        match_score = product.get("match_score", 0)
-        deal_score = product.get("deal_score", 0)
+        match_score = product.get(
+            "match_score",
+            0,
+        )
 
-        condition = product.get("condition", "any")
+        deal_score = product.get(
+            "deal_score",
+            0,
+        )
 
-        condition_text = condition_name(condition)
+        condition = product.get(
+            "condition",
+            "any",
+        )
+
+        condition_text = condition_name(
+            condition
+        )
+
+        if index == 1:
+            icon = "🥇"
+        elif index == 2:
+            icon = "🥈"
+        elif index == 3:
+            icon = "🥉"
+        else:
+            icon = "🔹"
 
         text = (
-            f"{'🥇' if index == 1 else '🥈' if index == 2 else '🥉' if index == 3 else '🔹'} "
+            f"{icon} "
             f"<b>{index}. {title}</b>\n\n"
             f"💰 Цена: <b>{format_price(price)} {symbol}</b>\n"
             f"🏪 Магазин: <b>{store}</b>\n"
@@ -624,7 +858,10 @@ async def process_requirements(message: Message, state: FSMContext):
         )
 
         keyboard = create_product_keyboard(
-            product.get("url", "")
+            product.get(
+                "url",
+                "",
+            )
         )
 
         await message.answer(
@@ -652,8 +889,12 @@ async def process_requirements(message: Message, state: FSMContext):
 # МОИ ПОИСКИ
 # =========================
 
-@dp.message(F.text == "📋 Мои поиски")
-async def my_searches(message: Message):
+@dp.message(
+    F.text == "📋 Мои поиски"
+)
+async def my_searches(
+    message: Message,
+):
     await message.answer(
         "📋 <b>Мои поиски</b>\n\n"
         "Здесь будут сохранённые поиски.\n\n"
@@ -666,8 +907,12 @@ async def my_searches(message: Message):
 # ОТСЛЕЖИВАНИЕ ЦЕН
 # =========================
 
-@dp.message(F.text == "🔔 Отслеживание цен")
-async def price_tracking(message: Message):
+@dp.message(
+    F.text == "🔔 Отслеживание цен"
+)
+async def price_tracking(
+    message: Message,
+):
     await message.answer(
         "🔔 <b>Отслеживание цен</b>\n\n"
         "Позже ты сможешь указать товар и желаемую цену.\n\n"
@@ -680,8 +925,12 @@ async def price_tracking(message: Message):
 # ИЗБРАННОЕ
 # =========================
 
-@dp.message(F.text == "⭐ Избранное")
-async def favorites(message: Message):
+@dp.message(
+    F.text == "⭐ Избранное"
+)
+async def favorites(
+    message: Message,
+):
     await message.answer(
         "⭐ <b>Избранное</b>\n\n"
         "Здесь будут сохранённые товары.\n\n"
@@ -694,8 +943,12 @@ async def favorites(message: Message):
 # НАСТРОЙКИ
 # =========================
 
-@dp.message(F.text == "⚙️ Настройки")
-async def settings(message: Message):
+@dp.message(
+    F.text == "⚙️ Настройки"
+)
+async def settings(
+    message: Message,
+):
     await message.answer(
         "⚙️ <b>Настройки</b>\n\n"
         "Здесь появятся настройки валюты, страны, "
@@ -709,9 +962,30 @@ async def settings(message: Message):
 # =========================
 
 async def main():
-    print("Dealvoro запущен!")
+    print(
+        "Загрузка каталога перед запуском..."
+    )
 
-    await dp.start_polling(bot)
+    # Один раз загружаем:
+    # Answear + TOUCH + INTERTOP.
+    #
+    # После этого пользовательские поиски
+    # используют каталог из памяти.
+    await asyncio.to_thread(
+        preload_products
+    )
+
+    print(
+        "Каталог готов!"
+    )
+
+    print(
+        "Dealvoro запущен!"
+    )
+
+    await dp.start_polling(
+        bot
+    )
 
 
 if __name__ == "__main__":
