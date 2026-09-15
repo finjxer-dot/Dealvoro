@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 .DS_Store
 answear_products.jsondata/dealvoro.db
+answear_products.json
+data/dealvoro.db
