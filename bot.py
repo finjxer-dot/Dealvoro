@@ -81,7 +81,6 @@ class SearchForm(StatesGroup):
     condition = State()
     requirements = State()
 
-
 # =========================================
 # ГЛАВНОЕ МЕНЮ
 # =========================================
@@ -264,14 +263,14 @@ def format_price(
 
 
 def create_product_keyboard(
-    favorite_id: int,
+    candidate_id: int,
     url: str,
     favorite: bool = False,
 ):
     """
     Кнопки товара.
 
-    favorite_id — ID записи-кандидата
+    candidate_id — ID кандидата товара
     в SQLite.
     """
 
@@ -297,7 +296,7 @@ def create_product_keyboard(
                 InlineKeyboardButton(
                     text="★ Удалить из избранного",
                     callback_data=(
-                        f"fav:remove:{favorite_id}"
+                        f"fav:remove:{candidate_id}"
                     ),
                 )
             ]
@@ -308,7 +307,7 @@ def create_product_keyboard(
                 InlineKeyboardButton(
                     text="⭐ В избранное",
                     callback_data=(
-                        f"fav:add:{favorite_id}"
+                        f"fav:add:{candidate_id}"
                     ),
                 )
             ]
@@ -423,6 +422,26 @@ async def find_product(
     state: FSMContext,
 ):
     await state.clear()
+
+    # Получаем сохранённые настройки пользователя
+    settings = get_settings(
+        message.from_user.id
+    )
+
+    await state.update_data(
+        currency=settings.get(
+            "currency",
+            "UAH",
+        ),
+        country=settings.get(
+            "country",
+            "UA",
+        ),
+        condition=settings.get(
+            "condition",
+            "new",
+        ),
+    )
 
     await state.set_state(
         SearchForm.product
@@ -606,14 +625,20 @@ async def process_max_price(
     )
 
     await state.set_state(
-        SearchForm.currency
+        SearchForm.requirements
     )
 
     await message.answer(
-        "💵 <b>Выбери валюту</b>",
+        "📝 <b>Есть дополнительные требования?</b>\n\n"
+        "Например:\n"
+        "• только с гарантией\n"
+        "• беспроводная мышь\n"
+        "• продавец от 4.8 ⭐\n"
+        "• только оригинал\n\n"
+        "Если требований нет — напиши <b>нет</b>.",
         parse_mode="HTML",
-        reply_markup=currency_keyboard,
-    )
+        reply_markup=ReplyKeyboardRemove(),
+)
 
 
 # =========================================
@@ -769,6 +794,25 @@ async def process_requirements(
         requirements = None
 
     data = await state.get_data()
+
+    settings = get_settings(
+        message.from_user.id
+)
+
+    data["currency"] = settings.get(
+        "currency",
+        "UAH",
+    )
+
+    data["country"] = settings.get(
+        "country",
+        "UA",
+    )
+
+    data["condition"] = settings.get(
+        "condition",
+        "new",
+    )
 
     await message.answer(
         "🧠 <b>Анализирую запрос...</b>",
@@ -1045,9 +1089,9 @@ async def process_requirements(
             )
 
             keyboard = create_product_keyboard(
-                candidate_id=candidate_id,
-                url=product_url,
-                favorite=favorite,
+                candidate_id,
+                product_url,
+                favorite,
             )
 
         except Exception as error:
@@ -1131,12 +1175,12 @@ async def favorite_add(
         )
 
         keyboard = create_product_keyboard(
-            candidate_id=candidate_id,
-            url=product.get(
+            candidate_id,
+            product.get(
                 "url",
                 "",
             ),
-            favorite=True,
+            True,
         )
 
         await callback.message.edit_reply_markup(
@@ -1214,12 +1258,12 @@ async def favorite_remove_from_card(
         )
 
         keyboard = create_product_keyboard(
-            candidate_id=candidate_id,
-            url=product.get(
+            candidate_id,
+            product.get(
                 "url",
                 "",
             ),
-            favorite=False,
+            False,
         )
 
         await callback.message.edit_reply_markup(
@@ -1517,9 +1561,9 @@ async def repeat_search(
         )
 
         keyboard = create_product_keyboard(
-            candidate_id=candidate_id,
-            url=url,
-            favorite=favorite,
+            candidate_id,
+            url,
+            favorite,
         )
 
         text = (

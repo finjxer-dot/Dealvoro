@@ -34,6 +34,20 @@ def get_connection():
 
     return connection
 
+def normalize_number(
+    value
+    ):
+    if value is None:
+        return None
+
+    try:
+        return float(value)
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
+
 
 # =========================================
 # ИНИЦИАЛИЗАЦИЯ
@@ -470,15 +484,19 @@ def add_favorite(
                 "store",
                 "",
             ),
-            product.get(
-                "price"
+            normalize_number(
+                product.get(
+                    "price"
+                )
             ),
             product.get(
                 "currency",
                 "UAH",
             ),
-            product.get(
-                "old_price"
+            normalize_number(
+                product.get(
+                    "old_price"
+                )
             ),
             product.get(
                 "url",
@@ -713,15 +731,19 @@ def save_favorite_candidate(
                 "store",
                 "",
             ),
-            product.get(
-                "price"
+            normalize_number(
+                product.get(
+                    "price"
+                )
             ),
             product.get(
                 "currency",
                 "UAH",
             ),
-            product.get(
-                "old_price"
+            normalize_number(
+                product.get(
+                    "old_price"
+                )
             ),
             product.get(
                 "url",
