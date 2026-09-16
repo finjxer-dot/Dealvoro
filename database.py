@@ -8,7 +8,7 @@ from pathlib import Path
 # ПУТИ
 # =========================================
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).parent
 
 DATA_DIR = PROJECT_ROOT / "data"
 
