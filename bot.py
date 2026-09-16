@@ -539,7 +539,7 @@ def create_product_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                     t("btn_open_product", lang),
+                    text=t("btn_open_product", lang),
                     url=url,
                 )
             ]
@@ -548,7 +548,7 @@ def create_product_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                t("btn_track_price", lang),
+                text=t("btn_track_price", lang),
                 callback_data=(
                     f"track:add:{candidate_id}"
                 ),
@@ -561,7 +561,7 @@ def create_product_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    t("btn_remove_favorite", lang),
+                    text=t("btn_remove_favorite", lang),
                     callback_data=(
                         f"fav:remove:{candidate_id}"
                     ),
@@ -574,7 +574,7 @@ def create_product_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    t("btn_add_favorite", lang),
+                    text=t("btn_add_favorite", lang),
                     callback_data=(
                         f"fav:add:{candidate_id}"
                     ),
@@ -600,13 +600,13 @@ def tracker_keyboard(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    t("tracker_btn_check", lang),
+                    text=t("tracker_btn_check", lang),
                     callback_data=(
                         f"track:check:{tracker_id}"
                     ),
                 ),
                 InlineKeyboardButton(
-                    t("tracker_btn_history", lang),
+                    text=t("tracker_btn_history", lang),
                     callback_data=(
                         f"track:history:{tracker_id}"
                     ),
@@ -614,7 +614,7 @@ def tracker_keyboard(
             ],
             [
                 InlineKeyboardButton(
-                    t("tracker_btn_delete", lang),
+                    text=t("tracker_btn_delete", lang),
                     callback_data=(
                         f"track:remove:{tracker_id}"
                     ),
