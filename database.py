@@ -230,6 +230,41 @@ def init_db():
     )
 
     # =====================================
+    # РЕФЕРАЛЫ
+    # =====================================
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS referrals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            referrer_id INTEGER NOT NULL,
+            referred_id INTEGER NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    # =====================================
+    # РЕФЕРАЛЬНЫЕ БОНУСЫ
+    # =====================================
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS referral_bonuses (
+            user_id INTEGER PRIMARY KEY,
+            given_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_referrals_referrer
+        ON referrals(referrer_id)
+        """
+    )
+
+    # =====================================
     # ОТСЛЕЖИВАНИЕ ЦЕН
     # =====================================
 
@@ -2438,6 +2473,139 @@ def get_price_history(
         for row in rows
     ]
 
+# =========================================
+# РЕФЕРАЛЫ
+# =========================================
+
+def add_referral(referrer_id, referred_id):
+    """
+    Записывает реферал.
+
+    Возвращает True, если запись добавлена.
+    Возвращает False, если:
+      - referrer_id == referred_id
+      - referred_id уже приходил по чьей-то ссылке
+    """
+
+    if referrer_id == referred_id:
+        return False
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(
+            """
+            INSERT INTO referrals (referrer_id, referred_id)
+            VALUES (?, ?)
+            """,
+            (referrer_id, referred_id),
+        )
+        connection.commit()
+        added = True
+
+    except sqlite3.IntegrityError:
+        # referred_id уже в таблице
+        added = False
+
+    connection.close()
+
+    return added
+
+
+def get_referral_count(user_id):
+    """
+    Сколько человек пришло по ссылке пользователя.
+    """
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM referrals
+        WHERE referrer_id = ?
+        """,
+        (user_id,),
+    )
+
+    row = cursor.fetchone()
+    connection.close()
+
+    return int(row["count"]) if row else 0
+
+
+def has_referral_bonus(user_id):
+    """
+    Проверяет, выдан ли уже Pro за 15 приглашённых.
+    """
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT user_id
+        FROM referral_bonuses
+        WHERE user_id = ?
+        LIMIT 1
+        """,
+        (user_id,),
+    )
+
+    row = cursor.fetchone()
+    connection.close()
+
+    return row is not None
+
+
+def mark_referral_bonus_given(user_id):
+    """
+    Отмечает, что Pro за 15 приглашённых выдан.
+    """
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO referral_bonuses (user_id)
+        VALUES (?)
+        """,
+        (user_id,),
+    )
+
+    connection.commit()
+    connection.close()
+
+
+def get_referrer(referred_id):
+    """
+    Возвращает user_id того, кто пригласил.
+    Или None.
+    """
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT referrer_id
+        FROM referrals
+        WHERE referred_id = ?
+        LIMIT 1
+        """,
+        (referred_id,),
+    )
+
+    row = cursor.fetchone()
+    connection.close()
+
+    if not row:
+        return None
+
+    return int(row["referrer_id"])
 
 # =========================================
 # ПОЛУЧИТЬ ПОСЛЕДНЮЮ ЦЕНУ

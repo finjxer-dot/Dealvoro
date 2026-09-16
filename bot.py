@@ -24,6 +24,10 @@ from database import (
     get_user_language,
     set_user_language,
     get_tracker_notification_info,
+    add_referral,
+    get_referral_count,
+    has_referral_bonus,
+    mark_referral_bonus_given,
 
     # Отслеживание — из database
     count_active_trackers,
@@ -73,6 +77,9 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram import BaseMiddleware
+from aiogram.types import TelegramObject
+from typing import Any, Awaitable, Callable
 from aiogram.types import (
     Message,
     ReplyKeyboardMarkup,
@@ -121,6 +128,15 @@ ADMIN_IDS = [
     1477455722,  # ← ЗАМЕНИ на свой Telegram user_id
 ]
 
+# =========================================
+# КАНАЛ ОБЯЗАТЕЛЬНОЙ ПОДПИСКИ
+# =========================================
+
+CHANNEL_ID = "@dealvoro_info"
+CHANNEL_URL = "https://t.me/dealvoro_info"
+
+REFERRAL_TARGET = 15        # приглашено для Pro
+REFERRAL_REWARD_DAYS = 30   # срок Pro
 
 # =========================================
 # СОСТОЯНИЯ ПОИСКА
@@ -143,6 +159,100 @@ class SearchForm(StatesGroup):
 class PriceTrackingForm(StatesGroup):
     target_price = State()
 
+# =========================================
+# MIDDLEWARE: ПРОВЕРКА ПОДПИСКИ НА КАНАЛ
+# =========================================
+
+class SubscriptionMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, dict], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict,
+    ) -> Any:
+
+        # Пропускаем всё, кроме Message и CallbackQuery
+        if not isinstance(event, (Message, CallbackQuery)):
+            return await handler(event, data)
+
+        user = event.from_user
+
+        if not user:
+            return await handler(event, data)
+
+        user_id = user.id
+
+        # Админов пропускаем всегда
+        if user_id in ADMIN_IDS:
+            return await handler(event, data)
+
+        # Пропускаем проверку подписки для callback sub:check
+        if isinstance(event, CallbackQuery) and event.data == "sub:check":
+            return await handler(event, data)
+
+        # Проверяем подписку через Telegram API
+        bot_instance: Bot = data["bot"]
+
+        try:
+            member = await bot_instance.get_chat_member(
+                CHANNEL_ID,
+                user_id,
+            )
+            status = member.status
+        except Exception as error:
+            print(f"[SUB_CHECK] Ошибка проверки: {error}")
+            # Если API недоступен — пропускаем, чтобы не блокировать
+            return await handler(event, data)
+
+        if status in ("member", "administrator", "creator"):
+            return await handler(event, data)
+
+        # Не подписан — показываем кнопку
+        lang = lang_of(user_id)
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📢 " + t("subscribe_channel_btn", lang),
+                        url=CHANNEL_URL,
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="✅ " + t("subscribe_check_btn", lang),
+                        callback_data="sub:check",
+                    )
+                ],
+            ]
+        )
+
+        text = t("subscribe_required", lang)
+
+        if isinstance(event, Message):
+            await event.answer(
+                text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+        else:
+            # CallbackQuery
+            try:
+                await event.message.answer(
+                    text,
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                )
+            except Exception:
+                pass
+            await event.answer(
+                t("subscribe_alert", lang),
+                show_alert=True,
+            )
+
+        return  # блокируем дальнейшую обработку
+dp.message.middleware(SubscriptionMiddleware())
+dp.callback_query.middleware(SubscriptionMiddleware())
 
 # =========================================
 # ЯЗЫК ПОЛЬЗОВАТЕЛЯ
@@ -755,6 +865,79 @@ async def start(
         reply_markup=main_keyboard(lang),
     )
 
+@dp.message(CommandStart(deep_link=True))
+async def start_with_ref(
+    message: Message,
+    state: FSMContext,
+    command: CommandStart,
+):
+
+    user_id = message.from_user.id
+
+    ref_arg = command.args or ""
+
+    if ref_arg.startswith("ref_"):
+
+        try:
+            referrer_id = int(ref_arg[4:])
+        except ValueError:
+            referrer_id = None
+
+        if referrer_id and referrer_id != user_id:
+
+            added = add_referral(referrer_id, user_id)
+
+            if added:
+                count = get_referral_count(referrer_id)
+
+                try:
+                    lang_ref = lang_of(referrer_id)
+                except Exception:
+                    lang_ref = DEFAULT_LANG
+
+                if count < REFERRAL_TARGET:
+                    try:
+                        await bot.send_message(
+                            referrer_id,
+                            t(
+                                "referral_new_friend",
+                                lang_ref,
+                                count=count,
+                                target=REFERRAL_TARGET,
+                            ),
+                            parse_mode="HTML",
+                        )
+                    except Exception as error:
+                        print(f"[REF] notify error: {error}")
+
+                elif (
+                    not has_referral_bonus(referrer_id)
+                    and get_active_plan(referrer_id) == "free"
+                ):
+                    # Выдаём Pro только если он Free
+                    activated = activate_subscription(
+                        referrer_id,
+                        "pro",
+                    )
+
+                    if activated:
+                        mark_referral_bonus_given(referrer_id)
+
+                        try:
+                            await bot.send_message(
+                                referrer_id,
+                                t(
+                                    "referral_pro_granted",
+                                    lang_ref,
+                                    days=REFERRAL_REWARD_DAYS,
+                                ),
+                                parse_mode="HTML",
+                            )
+                        except Exception as error:
+                            print(f"[REF] pro notify error: {error}")
+
+    # Дальше — обычный start
+    await start(message, state)
 
 # =========================================
 # НАЧАЛО ПОИСКА
@@ -3420,9 +3603,80 @@ def settings_keyboard(lang: str) -> InlineKeyboardMarkup:
                 text=t("settings_btn_reset", lang),
                 callback_data="settings:reset",
             )],
+            [InlineKeyboardButton(
+                text=t("settings_btn_referral", lang),
+                callback_data="settings:referral",
+            )],
         ]
     )
+@dp.callback_query(F.data == "settings:referral")
+async def settings_referral(callback: CallbackQuery):
 
+    user_id = callback.from_user.id
+    lang = lang_of(user_id)
+
+    bot_info = await bot.get_me()
+    bot_username = bot_info.username
+
+    link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+
+    count = get_referral_count(user_id)
+
+    text = t(
+        "referral_info",
+        lang,
+        link=link,
+        count=count,
+        target=REFERRAL_TARGET,
+        days=REFERRAL_REWARD_DAYS,
+    )
+
+    await callback.message.answer(
+        text,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+    await callback.answer()
+
+@dp.callback_query(F.data == "sub:check")
+async def sub_check(callback: CallbackQuery):
+
+    user_id = callback.from_user.id
+    lang = lang_of(user_id)
+
+    try:
+        member = await bot.get_chat_member(CHANNEL_ID, user_id)
+        status = member.status
+    except Exception as error:
+        print(f"[SUB_CHECK] {error}")
+        await callback.answer(
+            t("subscribe_error", lang),
+            show_alert=True,
+        )
+        return
+
+    if status not in ("member", "administrator", "creator"):
+        await callback.answer(
+            t("subscribe_still_not", lang),
+            show_alert=True,
+        )
+        return
+
+    await callback.answer(
+        t("subscribe_thanks_alert", lang),
+        show_alert=True,
+    )
+
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+
+    await callback.message.answer(
+        t("start_welcome", lang),
+        reply_markup=main_keyboard(lang),
+    )
 
 def settings_text(user_id: int) -> str:
     lang = lang_of(user_id)

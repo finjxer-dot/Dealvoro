@@ -75,6 +75,90 @@ TEXTS = {
     },
 
     # =====================================
+    # ПОДПИСКА НА КАНАЛ
+    # =====================================
+
+    "subscribe_required": {
+        "en": (
+            "🔒 <b>Please subscribe to our channel</b>\n\n"
+            "To use Dealvoro you must subscribe to "
+            "<b>@dealvoro_info</b>.\n\n"
+            "After subscribing — tap «✅ I subscribed»."
+        ),
+        "uk": (
+            "🔒 <b>Підпишись на наш канал</b>\n\n"
+            "Щоб користуватися Dealvoro, "
+            "підпишись на <b>@dealvoro_info</b>.\n\n"
+            "Після підписки — натисни «✅ Я підписався»."
+        ),
+    },
+    "subscribe_channel_btn": {
+        "en": "Subscribe",
+        "uk": "Підписатися",
+    },
+    "subscribe_check_btn": {
+        "en": "I subscribed",
+        "uk": "Я підписався",
+    },
+    "subscribe_alert": {
+        "en": "Please subscribe first",
+        "uk": "Спочатку підпишись",
+    },
+    "subscribe_error": {
+        "en": "Failed to verify. Try again.",
+        "uk": "Не вдалося перевірити. Спробуй ще.",
+    },
+    "subscribe_still_not": {
+        "en": "❌ You are still not subscribed.",
+        "uk": "❌ Ти ще не підписався.",
+    },
+    "subscribe_thanks_alert": {
+        "en": "✅ Thank you!",
+        "uk": "✅ Дякуємо!",
+    },
+
+    # =====================================
+    # РЕФЕРАЛЫ
+    # =====================================
+
+    "settings_btn_referral": {
+        "en": "🔗 Invite friends",
+        "uk": "🔗 Запросити друзів",
+    },
+    "referral_info": {
+        "en": (
+            "🔗 <b>Your invite link</b>\n\n"
+            "<code>{link}</code>\n\n"
+            "👥 Invited: <b>{count} / {target}</b>\n\n"
+            "🎁 Invite <b>{target}</b> friends — "
+            "get <b>Pro</b> for <b>{days} days</b> for free!"
+        ),
+        "uk": (
+            "🔗 <b>Твоє запрошувальне посилання</b>\n\n"
+            "<code>{link}</code>\n\n"
+            "👥 Запрошено: <b>{count} / {target}</b>\n\n"
+            "🎁 Запроси <b>{target}</b> друзів — "
+            "отримай <b>Pro</b> на <b>{days} днів</b> безкоштовно!"
+        ),
+    },
+    "referral_new_friend": {
+        "en": "🎉 New friend joined! Total: <b>{count} / {target}</b>",
+        "uk": "🎉 Новий друг приєднався! Всього: <b>{count} / {target}</b>",
+    },
+    "referral_pro_granted": {
+        "en": (
+            "🎉 <b>Congratulations!</b>\n\n"
+            "You invited <b>15 friends</b>!\n\n"
+            "🎁 <b>Pro</b> is now active for <b>{days} days</b>."
+        ),
+        "uk": (
+            "🎉 <b>Вітаємо!</b>\n\n"
+            "Ти запросив <b>15 друзів</b>!\n\n"
+            "🎁 <b>Pro</b> активовано на <b>{days} днів</b>."
+        ),
+    },
+
+    # =====================================
     # ПОИСК — ОБЩИЕ
     # =====================================
 
