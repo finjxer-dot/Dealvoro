@@ -4480,19 +4480,18 @@ async def price_tracker_loop():
 # =========================================
 
 @dp.message(Command("give"))
-async def admin_give(
-    message: Message,
-):
+async def admin_give(message: Message):
 
     if message.from_user.id not in ADMIN_IDS:
         return
+
+    lang = lang_of(message.from_user.id)
 
     parts = message.text.strip().split()
 
     if len(parts) != 3:
         await message.answer(
-            "Usage: <code>/give &lt;user_id&gt; &lt;pro|ultra&gt;</code>\n\n"
-            "Example: <code>/give 123456789 pro</code>",
+            t("admin_give_usage", lang),
             parse_mode="HTML",
         )
         return
@@ -4500,35 +4499,37 @@ async def admin_give(
     try:
         target_id = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id must be a number")
+        await message.answer(t("admin_give_bad_id", lang))
         return
 
     plan = parts[2].lower()
 
     if plan not in ("pro", "ultra"):
-        await message.answer("❌ plan must be <b>pro</b> or <b>ultra</b>", parse_mode="HTML")
+        await message.answer(
+            t("admin_give_bad_plan", lang),
+            parse_mode="HTML",
+        )
         return
 
     activated = activate_subscription(target_id, plan)
 
     if not activated:
-        await message.answer("❌ Failed to activate subscription")
+        await message.answer(t("admin_give_failed", lang))
         return
 
     await message.answer(
-        f"✅ <b>{plan}</b> activated for <code>{target_id}</code> "
-        f"for 30 days",
+        t("admin_give_success", lang, plan=plan, user_id=target_id),
         parse_mode="HTML",
     )
 
-    # Уведомляем получателя
+    # Уведомляем получателя — на ЕГО языке
     try:
+        target_lang = lang_of(target_id)
         plan_name = SUBSCRIPTION_PLANS[plan]["name"]
+
         await bot.send_message(
             target_id,
-            f"🎁 <b>Вам выдана подписка {plan_name}!</b>\n\n"
-            f"Активирована на <b>30 дней</b>.\n\n"
-            f"💎 Приятного использования Dealvoro!",
+            t("admin_gift_to_user", target_lang, plan_name=plan_name),
             parse_mode="HTML",
         )
     except Exception as error:
@@ -4536,18 +4537,18 @@ async def admin_give(
 
 
 @dp.message(Command("revoke"))
-async def admin_revoke(
-    message: Message,
-):
+async def admin_revoke(message: Message):
 
     if message.from_user.id not in ADMIN_IDS:
         return
+
+    lang = lang_of(message.from_user.id)
 
     parts = message.text.strip().split()
 
     if len(parts) != 2:
         await message.answer(
-            "Usage: <code>/revoke &lt;user_id&gt;</code>",
+            t("admin_revoke_usage", lang),
             parse_mode="HTML",
         )
         return
@@ -4555,34 +4556,34 @@ async def admin_revoke(
     try:
         target_id = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id must be a number")
+        await message.answer(t("admin_give_bad_id", lang))
         return
 
     activated = activate_subscription(target_id, "free")
 
     if not activated:
-        await message.answer("❌ Failed to revoke")
+        await message.answer(t("admin_revoke_failed", lang))
         return
 
     await message.answer(
-        f"✅ Subscription revoked for <code>{target_id}</code>",
+        t("admin_revoke_success", lang, user_id=target_id),
         parse_mode="HTML",
     )
 
 
 @dp.message(Command("whois"))
-async def admin_whois(
-    message: Message,
-):
+async def admin_whois(message: Message):
 
     if message.from_user.id not in ADMIN_IDS:
         return
+
+    lang = lang_of(message.from_user.id)
 
     parts = message.text.strip().split()
 
     if len(parts) != 2:
         await message.answer(
-            "Usage: <code>/whois &lt;user_id&gt;</code>",
+            t("admin_whois_usage", lang),
             parse_mode="HTML",
         )
         return
@@ -4590,36 +4591,38 @@ async def admin_whois(
     try:
         target_id = int(parts[1])
     except ValueError:
-        await message.answer("❌ user_id must be a number")
+        await message.answer(t("admin_give_bad_id", lang))
         return
 
     info = get_subscription_info(target_id)
     usage = get_usage_info(target_id)
 
-    plan = info.get("plan", "free")
     plan_name = info.get("name", "🆓 Free")
     expires_at = info.get("expires_at")
 
-    trackers_used = count_active_trackers(target_id)
-    trackers_limit = get_tracker_limit(target_id)
-
-    favorites_used = count_favorites(target_id)
-    history_used = count_search_history(target_id)
-
     text = (
-        f"👤 <b>User</b>: <code>{target_id}</code>\n\n"
-        f"💎 Plan: <b>{plan_name}</b>\n"
+        t("admin_whois_title", lang, user_id=target_id)
+        + "\n"
+        + t("admin_whois_plan", lang, plan_name=plan_name)
+        + "\n"
     )
 
     if expires_at:
-        text += f"📅 Until: <b>{expires_at}</b>\n"
+        text += t(
+            "admin_whois_until",
+            lang,
+            date=format_subscription_date(expires_at),
+        ) + "\n"
 
-    text += (
-        f"\n📊 <b>Usage</b>\n"
-        f"🔎 Searches: <b>{usage['used']} / {usage['limit']}</b>\n"
-        f"🔔 Trackers: <b>{trackers_used} / {trackers_limit}</b>\n"
-        f"⭐ Favorites: <b>{favorites_used}</b>\n"
-        f"📋 History: <b>{history_used}</b>\n"
+    text += t(
+        "admin_whois_usage_block",
+        lang,
+        searches_used=usage.get("used", 0),
+        searches_limit=usage.get("limit", 0),
+        trackers_used=count_active_trackers(target_id),
+        trackers_limit=get_tracker_limit(target_id),
+        favorites_used=count_favorites(target_id),
+        history_used=count_search_history(target_id),
     )
 
     await message.answer(text, parse_mode="HTML")

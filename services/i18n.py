@@ -1133,6 +1133,93 @@ TEXTS = {
         "en": "❌ An error occurred.",
         "uk": "❌ Сталася помилка.",
     },
+
+        # =====================================
+    # АДМИН-КОМАНДЫ
+    # =====================================
+
+    "admin_give_usage": {
+        "en": (
+            "Usage: <code>/give &lt;user_id&gt; &lt;pro|ultra&gt;</code>\n\n"
+            "Example: <code>/give 123456789 pro</code>"
+        ),
+        "uk": (
+            "Використання: <code>/give &lt;user_id&gt; &lt;pro|ultra&gt;</code>\n\n"
+            "Приклад: <code>/give 123456789 pro</code>"
+        ),
+    },
+    "admin_give_bad_id": {
+        "en": "❌ user_id must be a number",
+        "uk": "❌ user_id має бути числом",
+    },
+    "admin_give_bad_plan": {
+        "en": "❌ plan must be <b>pro</b> or <b>ultra</b>",
+        "uk": "❌ тариф має бути <b>pro</b> або <b>ultra</b>",
+    },
+    "admin_give_failed": {
+        "en": "❌ Failed to activate subscription",
+        "uk": "❌ Не вдалося активувати підписку",
+    },
+    "admin_give_success": {
+        "en": "✅ <b>{plan}</b> activated for <code>{user_id}</code> for 30 days",
+        "uk": "✅ <b>{plan}</b> активовано для <code>{user_id}</code> на 30 днів",
+    },
+    "admin_gift_to_user": {
+        "en": (
+            "🎁 <b>You have been gifted a {plan_name} subscription!</b>\n\n"
+            "Activated for <b>30 days</b>.\n\n"
+            "💎 Enjoy using Dealvoro!"
+        ),
+        "uk": (
+            "🎁 <b>Вам видано підписку {plan_name}!</b>\n\n"
+            "Активовано на <b>30 днів</b>.\n\n"
+            "💎 Приємного користування Dealvoro!"
+        ),
+    },
+    "admin_revoke_usage": {
+        "en": "Usage: <code>/revoke &lt;user_id&gt;</code>",
+        "uk": "Використання: <code>/revoke &lt;user_id&gt;</code>",
+    },
+    "admin_revoke_failed": {
+        "en": "❌ Failed to revoke",
+        "uk": "❌ Не вдалося скасувати",
+    },
+    "admin_revoke_success": {
+        "en": "✅ Subscription revoked for <code>{user_id}</code>",
+        "uk": "✅ Підписку скасовано для <code>{user_id}</code>",
+    },
+    "admin_whois_usage": {
+        "en": "Usage: <code>/whois &lt;user_id&gt;</code>",
+        "uk": "Використання: <code>/whois &lt;user_id&gt;</code>",
+    },
+    "admin_whois_title": {
+        "en": "👤 <b>User</b>: <code>{user_id}</code>",
+        "uk": "👤 <b>Користувач</b>: <code>{user_id}</code>",
+    },
+    "admin_whois_plan": {
+        "en": "💎 Plan: <b>{plan_name}</b>",
+        "uk": "💎 Тариф: <b>{plan_name}</b>",
+    },
+    "admin_whois_until": {
+        "en": "📅 Until: <b>{date}</b>",
+        "uk": "📅 До: <b>{date}</b>",
+    },
+    "admin_whois_usage_block": {
+        "en": (
+            "\n📊 <b>Usage</b>\n"
+            "🔎 Searches: <b>{searches_used} / {searches_limit}</b>\n"
+            "🔔 Trackers: <b>{trackers_used} / {trackers_limit}</b>\n"
+            "⭐ Favorites: <b>{favorites_used}</b>\n"
+            "📋 History: <b>{history_used}</b>\n"
+        ),
+        "uk": (
+            "\n📊 <b>Використання</b>\n"
+            "🔎 Пошуки: <b>{searches_used} / {searches_limit}</b>\n"
+            "🔔 Трекери: <b>{trackers_used} / {trackers_limit}</b>\n"
+            "⭐ Обране: <b>{favorites_used}</b>\n"
+            "📋 Історія: <b>{history_used}</b>\n"
+        ),
+    },
 }
 
 
