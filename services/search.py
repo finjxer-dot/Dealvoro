@@ -240,6 +240,76 @@ def get_product_category(
     )
 
 
+def extract_attributes_text(
+    product,
+):
+    """
+    Собирает дополнительные поля товара
+    (не title, не vendor, не description)
+    в один текст для поиска.
+
+    Используется для расширенного поиска
+    по soft_groups — например,
+    по материалу, цвету, фасону,
+    которые могут лежать в отдельных
+    полях фида.
+    """
+
+    attribute_fields = [
+        "color",
+        "colour",
+        "material",
+        "composition",
+        "style",
+        "fit",
+        "length",
+        "pattern",
+        "season",
+        "gender",
+        "age_group",
+        "ageGroup",
+        "attributes",
+        "features",
+        "tags",
+        "keywords",
+        "category_path",
+        "category_name",
+        "subcategory",
+    ]
+
+    parts = []
+
+    for field in attribute_fields:
+
+        value = product.get(field)
+
+        if value is None:
+            continue
+
+        if isinstance(value, (list, tuple)):
+
+            for item in value:
+
+                if item is not None:
+                    parts.append(str(item))
+
+        elif isinstance(value, dict):
+
+            for sub_value in value.values():
+
+                if sub_value is not None:
+                    parts.append(str(sub_value))
+
+        else:
+
+            parts.append(str(value))
+
+    if not parts:
+        return ""
+
+    return normalize(" ".join(parts))
+
+
 def get_product_identity_text(
     product,
 ):
@@ -277,6 +347,52 @@ def get_product_identity_text(
         parts.append(
             category
         )
+
+    return " ".join(
+        part
+        for part in parts
+        if part
+    ).strip()
+
+
+def get_product_strong_search_text(
+    product,
+):
+    """
+    Текст для ЖЁСТКИХ (strong) признаков.
+
+    Используется must_groups.
+    """
+
+    return " ".join(
+        [
+            get_product_title(product),
+            get_product_vendor(product),
+        ]
+    ).strip()
+
+
+def get_product_soft_search_text(
+    product,
+):
+    """
+    Текст для МЯГКИХ (soft) признаков.
+
+    Используется soft_groups.
+
+    Включает:
+      - title;
+      - vendor;
+      - description;
+      - дополнительные атрибуты фида.
+    """
+
+    parts = [
+        get_product_title(product),
+        get_product_vendor(product),
+        get_product_description(product),
+        extract_attributes_text(product),
+    ]
 
     return " ".join(
         part
@@ -698,7 +814,7 @@ def merge_required_groups(
 
 
 # =========================================
-# MUST GROUPS
+# MUST GROUPS (ЖЁСТКИЕ)
 # =========================================
 
 def matches_required_groups(
@@ -717,21 +833,21 @@ def matches_required_groups(
     например если бренд хранится
     отдельно от названия.
 
-    Описание не делает товар
-    подходящим.
+    Описание НЕ используется —
+    для этого есть matches_soft_groups.
     """
 
     if not must_groups:
 
         return True
 
-    title = get_product_title(
+    strong_text = get_product_strong_search_text(
         product
     )
 
-    vendor = get_product_vendor(
-        product
-    )
+    if not strong_text:
+
+        return False
 
     for group in must_groups:
 
@@ -767,16 +883,7 @@ def matches_required_groups(
 
             if term_matches_text(
                 normalized_term,
-                title,
-            ):
-
-                group_matched = True
-
-                break
-
-            if term_matches_text(
-                normalized_term,
-                vendor,
+                strong_text,
             ):
 
                 group_matched = True
@@ -784,6 +891,103 @@ def matches_required_groups(
                 break
 
         if not group_matched:
+
+            return False
+
+    return True
+
+
+# =========================================
+# SOFT GROUPS (МЯГКИЕ)
+# =========================================
+
+def matches_soft_groups(
+    product,
+    soft_groups,
+):
+    """
+    Проверяет мягкие обязательные признаки.
+
+    Логика:
+      - Если soft_groups пустые — пропускаем.
+      - Если у товара НЕТ описания и
+        НЕТ дополнительных атрибутов —
+        НЕ отсеиваем (не можем утверждать,
+        что признак отсутствует).
+      - Если описание/атрибуты ЕСТЬ —
+        ищем признак в:
+            title + vendor + description + attributes.
+      - Если признак НЕ найден —
+        товар отсеивается.
+    """
+
+    if not soft_groups:
+
+        return True
+
+    title = get_product_title(product)
+    vendor = get_product_vendor(product)
+    description = get_product_description(product)
+    attributes = extract_attributes_text(product)
+
+    has_extra_text = bool(
+        description or attributes
+    )
+
+    soft_text = get_product_soft_search_text(
+        product
+    )
+
+    for group in soft_groups:
+
+        if not isinstance(
+            group,
+            list,
+        ):
+
+            return False
+
+        if not group:
+
+            return False
+
+        group_matched = False
+
+        for term in group:
+
+            if not isinstance(
+                term,
+                str,
+            ):
+
+                continue
+
+            normalized_term = normalize(
+                term
+            )
+
+            if not normalized_term:
+
+                continue
+
+            if term_matches_text(
+                normalized_term,
+                soft_text,
+            ):
+
+                group_matched = True
+
+                break
+
+        if not group_matched:
+
+            # Если у товара нет описания
+            # и нет доп. атрибутов —
+            # не можем утверждать, что признак
+            # отсутствует. Пропускаем.
+            if not has_extra_text:
+
+                continue
 
             return False
 
@@ -806,6 +1010,11 @@ def contains_excluded_term(
     adult/child.
 
     Аудитория проверяется отдельно.
+
+    Проверяет по:
+      - title;
+      - vendor;
+      - description.
     """
 
     if not exclude_terms:
@@ -817,6 +1026,10 @@ def contains_excluded_term(
     )
 
     vendor = get_product_vendor(
+        product
+    )
+
+    description = get_product_description(
         product
     )
 
@@ -847,6 +1060,13 @@ def contains_excluded_term(
         if term_matches_text(
             normalized_term,
             vendor,
+        ):
+
+            return True
+
+        if term_matches_text(
+            normalized_term,
+            description,
         ):
 
             return True
@@ -910,7 +1130,7 @@ def _terms_are_variants(
 
     Примеры:
 
-    игровой / игры
+    игровой / игры
     мужская / мужской
     черная / черный
     компьютер / компьютеры
@@ -959,11 +1179,12 @@ def _terms_are_variants(
 def filter_duplicate_requirement_terms(
     requirement_terms,
     required_groups,
+    soft_groups=None,
 ):
     """
     Убирает из requirement_terms
     признаки, которые уже проверяются
-    через must_groups.
+    через must_groups ИЛИ soft_groups.
 
     В отличие от простой проверки
     точного совпадения здесь учитываются
@@ -980,18 +1201,6 @@ def filter_duplicate_requirement_terms(
     После фильтра:
 
         []
-
-    Аналогично:
-
-    must_groups:
-        ["мужской", "мужская", "мужские"]
-
-    requirement_terms:
-        ["мужская", "черная"]
-
-    После фильтра:
-
-        ["черная"]
     """
 
     if not requirement_terms:
@@ -1027,6 +1236,40 @@ def filter_duplicate_requirement_terms(
                 normalized_required_terms.append(
                     normalized_term
                 )
+
+    # =====================================
+    # SOFT GROUPS ТОЖЕ ИСКЛЮЧАЕМ
+    # =====================================
+
+    if soft_groups:
+
+        for group in soft_groups:
+
+            if not isinstance(
+                group,
+                list,
+            ):
+
+                continue
+
+            for term in group:
+
+                if not isinstance(
+                    term,
+                    str,
+                ):
+
+                    continue
+
+                normalized_term = normalize(
+                    term
+                )
+
+                if normalized_term:
+
+                    normalized_required_terms.append(
+                        normalized_term
+                    )
 
     result = []
 
@@ -1095,12 +1338,16 @@ def matches_requirement_terms(
     requirement_terms,
 ):
     """
-    Проверяет дополнительные требования
-    непосредственно по названию товара.
+    Проверяет дополнительные требования.
+
+    Проверяет по:
+      - title;
+      - vendor;
+      - description.
 
     Сюда должны попадать только требования,
     которые НЕ были представлены
-    в обязательных must_groups.
+    в must_groups или soft_groups.
     """
 
     if not requirement_terms:
@@ -1112,6 +1359,10 @@ def matches_requirement_terms(
     )
 
     vendor = get_product_vendor(
+        product
+    )
+
+    description = get_product_description(
         product
     )
 
@@ -1142,6 +1393,13 @@ def matches_requirement_terms(
         if term_matches_text(
             normalized_term,
             vendor,
+        ):
+
+            continue
+
+        if term_matches_text(
+            normalized_term,
+            description,
         ):
 
             continue
@@ -1477,12 +1735,17 @@ def matches_audience(
 def calculate_relevance_score(
     product,
     must_groups,
+    soft_groups=None,
     requirement_terms=None,
 ):
     """
     Чем больше обязательных совпадений
     найдено непосредственно в названии,
     тем выше результат.
+
+    must_groups:  проверяется в title/vendor.
+    soft_groups:  проверяется в title/vendor/description.
+    requirement_terms: то же + description.
     """
 
     title = get_product_title(
@@ -1493,7 +1756,19 @@ def calculate_relevance_score(
         product
     )
 
+    description = get_product_description(
+        product
+    )
+
+    strong_text = " ".join(
+        [title, vendor]
+    ).strip()
+
     score = 0
+
+    # =====================================
+    # MUST GROUPS
+    # =====================================
 
     for group in must_groups:
 
@@ -1538,6 +1813,60 @@ def calculate_relevance_score(
         )
 
     # =====================================
+    # SOFT GROUPS
+    # =====================================
+
+    if soft_groups:
+
+        for group in soft_groups:
+
+            best_group_score = 0
+
+            for term in group:
+
+                normalized_term = normalize(
+                    term
+                )
+
+                if not normalized_term:
+
+                    continue
+
+                if term_matches_text(
+                    normalized_term,
+                    title,
+                ):
+
+                    best_group_score = max(
+                        best_group_score,
+                        30,
+                    )
+
+                elif term_matches_text(
+                    normalized_term,
+                    vendor,
+                ):
+
+                    best_group_score = max(
+                        best_group_score,
+                        20,
+                    )
+
+                elif term_matches_text(
+                    normalized_term,
+                    description,
+                ):
+
+                    best_group_score = max(
+                        best_group_score,
+                        15,
+                    )
+
+            score += (
+                best_group_score
+            )
+
+    # =====================================
     # REQUIREMENT TERMS
     # =====================================
 
@@ -1566,6 +1895,13 @@ def calculate_relevance_score(
             ):
 
                 score += 25
+
+            elif term_matches_text(
+                normalized_term,
+                description,
+            ):
+
+                score += 15
 
     return score
 
@@ -1669,6 +2005,7 @@ def search_products(
     requirements=None,
     search_terms=None,
     must_groups=None,
+    soft_groups=None,
     requirement_terms=None,
     exclude_terms=None,
     requirement_groups=None,
@@ -1684,11 +2021,12 @@ def search_products(
     2. цена;
     3. состояние;
     4. аудитория;
-    5. обязательные группы;
-    6. дополнительные требования;
-    7. исключения;
-    8. релевантность;
-    9. Deal Score.
+    5. обязательные группы (strong);
+    6. мягкие группы (soft, ищем в описании);
+    7. дополнительные требования;
+    8. исключения;
+    9. релевантность;
+    10. Deal Score.
     """
 
     results = []
@@ -1842,7 +2180,21 @@ def search_products(
         ]
 
     # =====================================
-    # ОБЯЗАТЕЛЬНЫЕ ГРУППЫ
+    # SOFT GROUPS
+    # =====================================
+
+    if soft_groups:
+
+        soft_groups = clean_groups(
+            soft_groups
+        )
+
+    else:
+
+        soft_groups = []
+
+    # =====================================
+    # ОБЯЗАТЕЛЬНЫЕ ГРУППЫ (STRONG)
     # =====================================
 
     required_groups = (
@@ -1891,13 +2243,14 @@ def search_products(
 
     # =====================================
     # УБИРАЕМ ДУБЛИ / ВАРИАНТЫ
-    # С MUST_GROUPS
+    # С MUST_GROUPS И SOFT_GROUPS
     # =====================================
 
     requirement_terms = (
         filter_duplicate_requirement_terms(
             requirement_terms,
             required_groups,
+            soft_groups,
         )
     )
 
@@ -2059,12 +2412,23 @@ def search_products(
             continue
 
         # =================================
-        # ОБЯЗАТЕЛЬНЫЕ ГРУППЫ
+        # ОБЯЗАТЕЛЬНЫЕ ГРУППЫ (STRONG)
         # =================================
 
         if not matches_required_groups(
             product,
             required_groups,
+        ):
+
+            continue
+
+        # =================================
+        # МЯГКИЕ ГРУППЫ (SOFT)
+        # =================================
+
+        if not matches_soft_groups(
+            product,
+            soft_groups,
         ):
 
             continue
@@ -2099,6 +2463,7 @@ def search_products(
             calculate_relevance_score(
                 product,
                 required_groups,
+                soft_groups,
                 requirement_terms,
             )
         )

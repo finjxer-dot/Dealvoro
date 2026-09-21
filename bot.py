@@ -1440,6 +1440,11 @@ async def process_requirements(
         [[product_query]],
     )
 
+    soft_groups = ai_result.get(
+        "soft_groups",
+        [],
+    )
+
     requirements_result = ai_result.get(
         "requirements",
         requirements,
@@ -1480,10 +1485,39 @@ async def process_requirements(
             requirements=requirements_result,
             search_terms=search_terms,
             must_groups=must_groups,
+            soft_groups=soft_groups,
             requirement_terms=requirement_terms,
             exclude_terms=exclude_terms,
             audience=audience,
         )
+
+        # =====================================
+        # FALLBACK: если soft_groups отсеяли всё
+        # =====================================
+
+        if not results and soft_groups:
+
+            print(
+                "[SEARCH] soft_groups дали 0 — "
+                "повторяем без них"
+            )
+
+            results = await asyncio.to_thread(
+                search_products,
+                product_query=product_query,
+                min_price=data["min_price"],
+                max_price=data["max_price"],
+                currency=data["currency"],
+                country=data["country"],
+                condition=data["condition"],
+                requirements=requirements_result,
+                search_terms=search_terms,
+                must_groups=must_groups,
+                soft_groups=[],
+                requirement_terms=requirement_terms,
+                exclude_terms=exclude_terms,
+                audience=audience,
+            )
 
     except Exception as error:
 
@@ -2085,6 +2119,11 @@ async def repeat_search(
             "adult",
         )
 
+        soft_groups = ai_data.get(
+            "soft_groups",
+            [],
+        )
+
         results = await asyncio.to_thread(
             search_products,
             product_query=ai_data.get(
@@ -2105,6 +2144,7 @@ async def repeat_search(
                 "must_groups",
                 [[item["product"]]],
             ),
+            soft_groups=soft_groups,
             requirement_terms=ai_data.get(
                 "requirement_terms",
                 [],
@@ -2115,6 +2155,49 @@ async def repeat_search(
             ),
             audience=audience,
         )
+
+        # =====================================
+        # FALLBACK: если soft_groups отсеяли всё
+        # =====================================
+
+        if not results and soft_groups:
+
+            print(
+                "[SEARCH] repeat: soft_groups дали 0 — "
+                "повторяем без них"
+            )
+
+            results = await asyncio.to_thread(
+                search_products,
+                product_query=ai_data.get(
+                    "product_query",
+                    item["product"],
+                ),
+                min_price=item["min_price"],
+                max_price=item["max_price"],
+                currency=item["currency"],
+                country=item["country"],
+                condition=item["condition"],
+                requirements=item.get("requirements"),
+                search_terms=ai_data.get(
+                    "search_terms",
+                    [item["product"]],
+                ),
+                must_groups=ai_data.get(
+                    "must_groups",
+                    [[item["product"]]],
+                ),
+                soft_groups=[],
+                requirement_terms=ai_data.get(
+                    "requirement_terms",
+                    [],
+                ),
+                exclude_terms=ai_data.get(
+                    "exclude_terms",
+                    [],
+                ),
+                audience=audience,
+            )
 
     except Exception as error:
 
