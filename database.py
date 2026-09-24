@@ -33,10 +33,17 @@ BACKUP_FILE = DATABASE_FILE.parent / (
 )
 
 # Создаём папку, если её нет
-DATABASE_FILE.parent.mkdir(
-    parents=True,
-    exist_ok=True,
-)
+try:
+    DATABASE_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+except OSError as error:
+    print(f"[DB] Не могу создать {DATABASE_FILE.parent}: {error}")
+    # Fallback: /tmp (данные не сохранятся, но бот запустится)
+    DATABASE_FILE = Path("/tmp/dealvoro.db")
+    BACKUP_FILE = Path("/tmp/dealvoro_backup.db")
+    print(f"[DB] Fallback: {DATABASE_FILE}")
 
 DATA_DIR.mkdir(
     parents=True,
