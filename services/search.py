@@ -25,20 +25,48 @@ PRODUCTS_FILE = (
 
 
 # =========================================
+# GENERIC-СЛОВА (ЗАЩИТА)
+# =========================================
+
+GENERIC_TERMS = {
+    "underwear",
+    "clothing",
+    "clothes",
+    "apparel",
+    "wear",
+    "shoes",
+    "footwear",
+    "accessories",
+    "accessory",
+    "sportswear",
+    "sport",
+    "sports",
+    "fashion",
+    "outfit",
+
+    "electronics",
+    "devices",
+    "device",
+    "gadgets",
+    "gadget",
+    "tech",
+    "technology",
+
+    "goods",
+    "product",
+    "products",
+    "item",
+    "items",
+}
+
+
+# =========================================
 # ПОТОКОВАЯ ЗАГРУЗКА JSON.GZ
 # =========================================
 
 def iter_json_gz(
     file_path,
 ):
-    """
-    Читает JSON-массив из .gz
-    по одному товару.
-
-    Весь каталог не загружается
-    одновременно в RAM.
-    """
-
     with gzip.open(
         file_path,
         "rb",
@@ -56,14 +84,6 @@ def iter_store_products(
     store,
     cache_path,
 ):
-    """
-    Потоково читает каталог магазина.
-
-    Если готового .gz нет,
-    используется существующий
-    загрузчик фида.
-    """
-
     if cache_path.exists():
 
         print(
@@ -97,19 +117,6 @@ def iter_store_products(
 # =========================================
 
 def iter_all_products():
-    """
-    Последовательно читает:
-
-    1. Answear
-    2. магазины из FEEDS
-
-    Новые магазины автоматически
-    берутся из FEEDS.
-    """
-
-    # =====================================
-    # ANSWEAR
-    # =====================================
 
     if not PRODUCTS_FILE.exists():
 
@@ -126,10 +133,6 @@ def iter_all_products():
     yield from iter_json_gz(
         PRODUCTS_FILE
     )
-
-    # =====================================
-    # ДОПОЛНИТЕЛЬНЫЕ МАГАЗИНЫ
-    # =====================================
 
     for store, config in FEEDS.items():
 
@@ -159,10 +162,6 @@ def iter_all_products():
 def normalize(
     text,
 ):
-    """
-    Приводит текст к единому виду.
-    """
-
     if not text:
         return ""
 
@@ -243,17 +242,6 @@ def get_product_category(
 def extract_attributes_text(
     product,
 ):
-    """
-    Собирает дополнительные поля товара
-    (не title, не vendor, не description)
-    в один текст для поиска.
-
-    Используется для расширенного поиска
-    по soft_groups — например,
-    по материалу, цвету, фасону,
-    которые могут лежать в отдельных
-    полях фида.
-    """
 
     attribute_fields = [
         "color",
@@ -310,60 +298,15 @@ def extract_attributes_text(
     return normalize(" ".join(parts))
 
 
-def get_product_identity_text(
+def get_product_title_text(
     product,
 ):
-    """
-    Основной текст для идентификации товара.
-
-    Название — главное.
-    Бренд — дополнительное поле.
-
-    Категория добавляется только если
-    она действительно является текстовой.
-    """
-
-    title = get_product_title(
-        product
-    )
-
-    vendor = get_product_vendor(
-        product
-    )
-
-    category = get_product_category(
-        product
-    )
-
-    parts = [
-        title,
-        vendor,
-    ]
-
-    if category and not is_category_id(
-        category
-    ):
-
-        parts.append(
-            category
-        )
-
-    return " ".join(
-        part
-        for part in parts
-        if part
-    ).strip()
+    return get_product_title(product)
 
 
 def get_product_strong_search_text(
     product,
 ):
-    """
-    Текст для ЖЁСТКИХ (strong) признаков.
-
-    Используется must_groups.
-    """
-
     return " ".join(
         [
             get_product_title(product),
@@ -375,17 +318,6 @@ def get_product_strong_search_text(
 def get_product_soft_search_text(
     product,
 ):
-    """
-    Текст для МЯГКИХ (soft) признаков.
-
-    Используется soft_groups.
-
-    Включает:
-      - title;
-      - vendor;
-      - description;
-      - дополнительные атрибуты фида.
-    """
 
     parts = [
         get_product_title(product),
@@ -417,125 +349,6 @@ def get_product_full_search_text(
             ),
         ]
     ).strip()
-
-
-def is_category_id(
-    value,
-):
-    """
-    Проверяет, похожа ли категория
-    на технический ID.
-
-    Примеры:
-
-    40
-    123
-    6bf712cbb4
-    """
-
-    if not value:
-        return False
-
-    value = str(
-        value
-    ).strip()
-
-    if value.isdigit():
-        return True
-
-    if re.fullmatch(
-        r"[a-f0-9]{6,}",
-        value.lower(),
-    ):
-
-        return True
-
-    return False
-
-
-# =========================================
-# MATCH SCORE
-# =========================================
-
-def calculate_match_score(
-    query,
-    product,
-):
-    """
-    Дополнительный score запроса.
-
-    Главное поле — название товара.
-
-    Описание получает небольшой вес,
-    чтобы техническое упоминание товара
-    не делало другой товар релевантным.
-    """
-
-    query_words = get_words(
-        query
-    )
-
-    if not query_words:
-        return 0
-
-    title = get_product_title(
-        product
-    )
-
-    vendor = get_product_vendor(
-        product
-    )
-
-    description = get_product_description(
-        product
-    )
-
-    title_words = title.split()
-
-    score = 0
-
-    for word in query_words:
-
-        if word in title_words:
-
-            score += 50
-
-        elif any(
-            word in title_word
-            for title_word in title_words
-        ):
-
-            score += 25
-
-        elif word in vendor.split():
-
-            score += 20
-
-        elif word in description:
-
-            score += 3
-
-    normalized_query = normalize(
-        query
-    )
-
-    if (
-        normalized_query
-        and normalized_query in title
-    ):
-
-        score += 40
-
-    if (
-        normalized_query
-        and title.startswith(
-            normalized_query
-        )
-    ):
-
-        score += 20
-
-    return score
 
 
 # =========================================
@@ -671,14 +484,6 @@ def term_matches_text(
     term,
     text,
 ):
-    """
-    Проверяет термин в тексте.
-
-    Для одного слова требуется
-    совпадение отдельного слова.
-
-    Для фразы требуется вся фраза.
-    """
 
     normalized_term = normalize(
         term
@@ -703,10 +508,6 @@ def term_matches_text(
         normalized_text.split()
     )
 
-    # =====================================
-    # ОДНО СЛОВО
-    # =====================================
-
     if len(term_words) == 1:
 
         return (
@@ -714,30 +515,9 @@ def term_matches_text(
             in text_words
         )
 
-    # =====================================
-    # ФРАЗА
-    # =====================================
-
     return (
         normalized_term
         in normalized_text
-    )
-
-
-def term_matches_title(
-    term,
-    product,
-):
-    """
-    Проверяет термин непосредственно
-    в названии товара.
-    """
-
-    return term_matches_text(
-        term,
-        get_product_title(
-            product
-        ),
     )
 
 
@@ -792,6 +572,49 @@ def clean_groups(
     return cleaned_groups
 
 
+def remove_generic_terms_from_first_group(
+    must_groups,
+):
+
+    if not must_groups:
+        return must_groups
+
+    result = []
+
+    for index, group in enumerate(must_groups):
+
+        if not isinstance(group, list):
+            continue
+
+        if index != 0:
+
+            result.append(list(group))
+            continue
+
+        filtered = []
+
+        for term in group:
+
+            if not isinstance(term, str):
+                continue
+
+            key = normalize(term)
+
+            if not key:
+                continue
+
+            if key in GENERIC_TERMS:
+                continue
+
+            filtered.append(term)
+
+        if filtered:
+
+            result.append(filtered)
+
+    return result
+
+
 def merge_required_groups(
     must_groups,
     requirement_groups=None,
@@ -827,19 +650,28 @@ def matches_required_groups(
     Внутри одной группы достаточно
     одного совпадения.
 
-    Основное поле — название.
+    Логика поиска:
 
-    Vendor используется дополнительно,
-    например если бренд хранится
-    отдельно от названия.
+    - Первая группа (must_groups[0] —
+      это ТИП ТОВАРА) проверяется
+      ТОЛЬКО по названию.
 
-    Описание НЕ используется —
-    для этого есть matches_soft_groups.
+      Причина: если проверять по vendor,
+      то "Calvin Klein Underwear" в vendor
+      подменяет собой тип товара.
+
+    - Остальные группы (бренд, модель,
+      цвет, пол, размер) проверяются
+      по title + vendor.
     """
 
     if not must_groups:
 
         return True
+
+    title_text = get_product_title_text(
+        product
+    )
 
     strong_text = get_product_strong_search_text(
         product
@@ -849,7 +681,7 @@ def matches_required_groups(
 
         return False
 
-    for group in must_groups:
+    for index, group in enumerate(must_groups):
 
         if not isinstance(
             group,
@@ -859,6 +691,20 @@ def matches_required_groups(
             return False
 
         if not group:
+
+            return False
+
+        is_first_group = (index == 0)
+
+        if is_first_group:
+
+            search_text = title_text
+
+        else:
+
+            search_text = strong_text
+
+        if not search_text:
 
             return False
 
@@ -883,7 +729,7 @@ def matches_required_groups(
 
             if term_matches_text(
                 normalized_term,
-                strong_text,
+                search_text,
             ):
 
                 group_matched = True
@@ -905,21 +751,6 @@ def matches_soft_groups(
     product,
     soft_groups,
 ):
-    """
-    Проверяет мягкие обязательные признаки.
-
-    Логика:
-      - Если soft_groups пустые — пропускаем.
-      - Если у товара НЕТ описания и
-        НЕТ дополнительных атрибутов —
-        НЕ отсеиваем (не можем утверждать,
-        что признак отсутствует).
-      - Если описание/атрибуты ЕСТЬ —
-        ищем признак в:
-            title + vendor + description + attributes.
-      - Если признак НЕ найден —
-        товар отсеивается.
-    """
 
     if not soft_groups:
 
@@ -981,10 +812,6 @@ def matches_soft_groups(
 
         if not group_matched:
 
-            # Если у товара нет описания
-            # и нет доп. атрибутов —
-            # не можем утверждать, что признак
-            # отсутствует. Пропускаем.
             if not has_extra_text:
 
                 continue
@@ -1002,20 +829,6 @@ def contains_excluded_term(
     product,
     exclude_terms,
 ):
-    """
-    Проверяет обычные exclude_terms,
-    которые пришли от AI.
-
-    Они НЕ используются для определения
-    adult/child.
-
-    Аудитория проверяется отдельно.
-
-    Проверяет по:
-      - title;
-      - vendor;
-      - description.
-    """
 
     if not exclude_terms:
 
@@ -1081,15 +894,6 @@ def contains_excluded_term(
 def _term_words_for_comparison(
     term,
 ):
-    """
-    Убирает служебные слова, которые
-    не несут характеристики товара.
-
-    Например:
-
-    "для игр" -> ["игр"]
-    "для мужчины" -> ["мужчины"]
-    """
 
     stop_words = {
         "для",
@@ -1123,18 +927,6 @@ def _terms_are_variants(
     first,
     second,
 ):
-    """
-    Пытается определить, являются ли
-    два термина вариантами одного
-    признака.
-
-    Примеры:
-
-    игровой / игры
-    мужская / мужской
-    черная / черный
-    компьютер / компьютеры
-    """
 
     first_words = (
         _term_words_for_comparison(
@@ -1160,8 +952,6 @@ def _terms_are_variants(
 
                 return True
 
-            # Общий корень для обычных
-            # русских/украинских форм.
             if (
                 len(first_word) >= 4
                 and len(second_word) >= 4
@@ -1181,27 +971,6 @@ def filter_duplicate_requirement_terms(
     required_groups,
     soft_groups=None,
 ):
-    """
-    Убирает из requirement_terms
-    признаки, которые уже проверяются
-    через must_groups ИЛИ soft_groups.
-
-    В отличие от простой проверки
-    точного совпадения здесь учитываются
-    также варианты одного признака.
-
-    Например:
-
-    must_groups:
-        ["игровой", "игровые", "gaming"]
-
-    requirement_terms:
-        ["для игр", "игровой", "gaming"]
-
-    После фильтра:
-
-        []
-    """
 
     if not requirement_terms:
 
@@ -1236,10 +1005,6 @@ def filter_duplicate_requirement_terms(
                 normalized_required_terms.append(
                     normalized_term
                 )
-
-    # =====================================
-    # SOFT GROUPS ТОЖЕ ИСКЛЮЧАЕМ
-    # =====================================
 
     if soft_groups:
 
@@ -1337,18 +1102,6 @@ def matches_requirement_terms(
     product,
     requirement_terms,
 ):
-    """
-    Проверяет дополнительные требования.
-
-    Проверяет по:
-      - title;
-      - vendor;
-      - description.
-
-    Сюда должны попадать только требования,
-    которые НЕ были представлены
-    в must_groups или soft_groups.
-    """
 
     if not requirement_terms:
 
@@ -1416,25 +1169,6 @@ def matches_requirement_terms(
 def get_structured_audience(
     product,
 ):
-    """
-    Пытается определить аудиторию
-    из ДЕЙСТВИТЕЛЬНО специфичных полей фида.
-
-    Не используются широкие поля вроде:
-
-        department
-        section
-        customer_group
-
-    потому что они могут описывать
-    раздел магазина, а не конкретный товар.
-
-    Возможные результаты:
-
-    adult
-    child
-    None
-    """
 
     field_names = [
         "audience",
@@ -1487,10 +1221,6 @@ def get_structured_audience(
 
         return None
 
-    # =====================================
-    # ДЕТСКАЯ АУДИТОРИЯ
-    # =====================================
-
     child_patterns = [
         r"\bchild\b",
         r"\bchildren\b",
@@ -1511,10 +1241,6 @@ def get_structured_audience(
         ):
 
             return "child"
-
-    # =====================================
-    # ВЗРОСЛАЯ АУДИТОРИЯ
-    # =====================================
 
     adult_patterns = [
         r"\badult\b",
@@ -1537,19 +1263,6 @@ def get_structured_audience(
 def extract_age_numbers(
     text,
 ):
-    """
-    Извлекает явные возрастные конструкции
-    из данных товара.
-
-    Примеры:
-
-    0-3 years
-    3-6 лет
-    8 years
-    10 років
-    age 12
-    12 months
-    """
 
     normalized = normalize(
         text
@@ -1561,16 +1274,12 @@ def extract_age_numbers(
 
     patterns = [
 
-        # Возрастные диапазоны
         r"\b\d{1,2}\s*(?:-|–|—|to)\s*\d{1,2}\s*(?:years?|лет|років|роки)\b",
 
-        # Число + лет/років/years
         r"\b\d{1,2}\s*(?:years?|лет|років|роки)\b",
 
-        # age 12
         r"\bage\s*\d{1,2}\b",
 
-        # months
         r"\b\d{1,2}\s*(?:months?|месяцев|місяців)\b",
     ]
 
@@ -1589,23 +1298,6 @@ def extract_age_numbers(
 def looks_like_child_product(
     product,
 ):
-    """
-    Определяет, выглядит ли товар
-    явно детским.
-
-    Приоритет:
-
-    1. явная детская маркировка
-       в названии/vendor;
-    2. явный возраст;
-    3. специфические структурированные
-       поля фида.
-
-    Это важно, потому что некоторые фиды
-    могут содержать широкие служебные
-    поля, которые не описывают конкретный
-    товар.
-    """
 
     title = get_product_title(
         product
@@ -1621,10 +1313,6 @@ def looks_like_child_product(
             vendor,
         ]
     ).strip()
-
-    # =====================================
-    # ЯВНАЯ МАРКИРОВКА В НАЗВАНИИ
-    # =====================================
 
     if product_text:
 
@@ -1652,19 +1340,11 @@ def looks_like_child_product(
 
                 return True
 
-        # =================================
-        # ЯВНЫЙ ВОЗРАСТ
-        # =================================
-
         if extract_age_numbers(
             product_text
         ):
 
             return True
-
-    # =====================================
-    # СТРУКТУРИРОВАННОЕ ПОЛЕ
-    # =====================================
 
     structured_audience = (
         get_structured_audience(
@@ -1683,41 +1363,16 @@ def matches_audience(
     product,
     audience,
 ):
-    """
-    Проверяет соответствие товара
-    аудитории пользователя.
-
-    adult:
-        товары, которые явно выглядят
-        детскими, исключаются.
-
-    child:
-        пропускаются только товары,
-        которые сами выглядят детскими.
-
-    Неизвестная аудитория товара:
-
-        adult → допускается;
-        child → не допускается.
-    """
 
     normalized_audience = str(
         audience or "adult"
     ).strip().lower()
-
-    # =====================================
-    # CHILD
-    # =====================================
 
     if normalized_audience == "child":
 
         return looks_like_child_product(
             product
         )
-
-    # =====================================
-    # ADULT
-    # =====================================
 
     if looks_like_child_product(
         product
@@ -1738,15 +1393,6 @@ def calculate_relevance_score(
     soft_groups=None,
     requirement_terms=None,
 ):
-    """
-    Чем больше обязательных совпадений
-    найдено непосредственно в названии,
-    тем выше результат.
-
-    must_groups:  проверяется в title/vendor.
-    soft_groups:  проверяется в title/vendor/description.
-    requirement_terms: то же + description.
-    """
 
     title = get_product_title(
         product
@@ -1760,17 +1406,14 @@ def calculate_relevance_score(
         product
     )
 
-    strong_text = " ".join(
-        [title, vendor]
-    ).strip()
-
     score = 0
 
-    # =====================================
-    # MUST GROUPS
-    # =====================================
+    for index, group in enumerate(must_groups):
 
-    for group in must_groups:
+        if not isinstance(group, list):
+            continue
+
+        is_first_group = (index == 0)
 
         best_group_score = 0
 
@@ -1781,6 +1424,20 @@ def calculate_relevance_score(
             )
 
             if not normalized_term:
+
+                continue
+
+            if is_first_group:
+
+                if term_matches_text(
+                    normalized_term,
+                    title,
+                ):
+
+                    best_group_score = max(
+                        best_group_score,
+                        100,
+                    )
 
                 continue
 
@@ -1811,10 +1468,6 @@ def calculate_relevance_score(
         score += (
             best_group_score
         )
-
-    # =====================================
-    # SOFT GROUPS
-    # =====================================
 
     if soft_groups:
 
@@ -1866,10 +1519,6 @@ def calculate_relevance_score(
                 best_group_score
             )
 
-    # =====================================
-    # REQUIREMENT TERMS
-    # =====================================
-
     if requirement_terms:
 
         for term in requirement_terms:
@@ -1907,91 +1556,6 @@ def calculate_relevance_score(
 
 
 # =========================================
-# ДОПОЛНИТЕЛЬНАЯ ЗАЩИТА ТИПА ТОВАРА
-# =========================================
-
-def looks_like_accessory_for_requested_object(
-    product,
-    product_query,
-):
-    """
-    Защита от классической ошибки:
-
-    Запрос:
-        компьютер
-
-    Товар:
-        игровая мышь для PC
-
-    В названии есть PC,
-    но сам товар — мышь.
-    """
-
-    query = normalize(
-        product_query
-    )
-
-    title = get_product_title(
-        product
-    )
-
-    if not query or not title:
-
-        return False
-
-    computer_queries = {
-        "компьютер",
-        "компьютеры",
-        "комп",
-        "пк",
-        "desktop computer",
-        "desktop pc",
-    }
-
-    if query in computer_queries:
-
-        accessory_terms = {
-            "мышь",
-            "мышка",
-            "mouse",
-            "клавиатура",
-            "keyboard",
-            "наушники",
-            "гарнитура",
-            "headset",
-            "руль",
-            "геймпад",
-            "gamepad",
-            "монитор",
-            "monitor",
-            "веб камера",
-            "webcam",
-            "колонки",
-            "speaker",
-            "кабель",
-            "cable",
-            "зарядка",
-            "adapter",
-            "адаптер",
-            "коврик",
-            "чехол",
-            "подставка",
-            "аксессуар",
-        }
-
-        for term in accessory_terms:
-
-            if term_matches_text(
-                term,
-                title,
-            ):
-
-                return True
-
-    return False
-
-
-# =========================================
 # ОСНОВНОЙ ПОИСК
 # =========================================
 
@@ -2011,33 +1575,12 @@ def search_products(
     requirement_groups=None,
     audience="adult",
 ):
-    """
-    Потоковый поиск по всем подключённым
-    магазинам.
-
-    Основная логика:
-
-    1. валюта;
-    2. цена;
-    3. состояние;
-    4. аудитория;
-    5. обязательные группы (strong);
-    6. мягкие группы (soft, ищем в описании);
-    7. дополнительные требования;
-    8. исключения;
-    9. релевантность;
-    10. Deal Score.
-    """
 
     results = []
 
     seen_products = set()
 
     products_checked = 0
-
-    # =====================================
-    # НОРМАЛИЗАЦИЯ ПАРАМЕТРОВ
-    # =====================================
 
     target_currency = normalize_currency(
         currency
@@ -2062,10 +1605,6 @@ def search_products(
 
         target_audience = "adult"
 
-    # =====================================
-    # MIN PRICE
-    # =====================================
-
     try:
 
         min_price = float(
@@ -2078,10 +1617,6 @@ def search_products(
     ):
 
         min_price = 0
-
-    # =====================================
-    # MAX PRICE
-    # =====================================
 
     if max_price in (
         None,
@@ -2106,10 +1641,6 @@ def search_products(
         ):
 
             max_price = None
-
-    # =====================================
-    # SEARCH TERMS
-    # =====================================
 
     if search_terms:
 
@@ -2152,10 +1683,6 @@ def search_products(
             else []
         )
 
-    # =====================================
-    # MUST GROUPS
-    # =====================================
-
     if must_groups:
 
         must_groups = clean_groups(
@@ -2179,9 +1706,23 @@ def search_products(
             for word in words
         ]
 
-    # =====================================
-    # SOFT GROUPS
-    # =====================================
+    must_groups = remove_generic_terms_from_first_group(
+        must_groups
+    )
+
+    if not must_groups:
+
+        normalized_product = normalize(
+            product_query
+        )
+
+        if normalized_product:
+
+            must_groups = [[normalized_product]]
+
+        else:
+
+            must_groups = []
 
     if soft_groups:
 
@@ -2193,20 +1734,12 @@ def search_products(
 
         soft_groups = []
 
-    # =====================================
-    # ОБЯЗАТЕЛЬНЫЕ ГРУППЫ (STRONG)
-    # =====================================
-
     required_groups = (
         merge_required_groups(
             must_groups,
             requirement_groups,
         )
     )
-
-    # =====================================
-    # REQUIREMENT TERMS
-    # =====================================
 
     if requirement_terms:
 
@@ -2241,11 +1774,6 @@ def search_products(
 
         requirement_terms = []
 
-    # =====================================
-    # УБИРАЕМ ДУБЛИ / ВАРИАНТЫ
-    # С MUST_GROUPS И SOFT_GROUPS
-    # =====================================
-
     requirement_terms = (
         filter_duplicate_requirement_terms(
             requirement_terms,
@@ -2253,10 +1781,6 @@ def search_products(
             soft_groups,
         )
     )
-
-    # =====================================
-    # EXCLUDE TERMS
-    # =====================================
 
     if exclude_terms:
 
@@ -2365,14 +1889,26 @@ def search_products(
             continue
 
         # =================================
+        # TITLE (нужно для condition)
+        # =================================
+
+        title_raw = (
+            product.get(
+                "name"
+            )
+            or product.get(
+                "title"
+            )
+            or "Без названия"
+        )
+
+        # =================================
         # СОСТОЯНИЕ
         # =================================
 
         product_condition = normalize_condition(
-            product.get(
-                "condition",
-                "new",
-            )
+            product.get("condition"),
+            title=title_raw,
         )
 
         if (
@@ -2396,17 +1932,6 @@ def search_products(
         if not matches_audience(
             product,
             target_audience,
-        ):
-
-            continue
-
-        # =================================
-        # ОЧЕВИДНО НЕ ТОТ ТИП
-        # =================================
-
-        if looks_like_accessory_for_requested_object(
-            product,
-            product_query,
         ):
 
             continue
@@ -2553,20 +2078,6 @@ def search_products(
 
         deal_score = calculate_deal_score(
             product
-        )
-
-        # =================================
-        # TITLE
-        # =================================
-
-        title_raw = (
-            product.get(
-                "name"
-            )
-            or product.get(
-                "title"
-            )
-            or "Без названия"
         )
 
         # =================================
@@ -2820,35 +2331,69 @@ def normalize_currency(
 
 def normalize_condition(
     value,
+    title=None,
 ):
-    if value is None:
+    """
+    Нормализует состояние товара.
 
-        return "new"
+    Приоритет:
 
-    text = normalize(
-        value
-    )
+    1. Явное поле condition.
+    2. Признак б/у в названии (title).
 
-    if text in {
-        "used",
-        "б у",
-        "бу",
-        "вживаний",
-        "вживана",
-        "вживане",
-        "бивший у використанні",
-    }:
+    Если поле condition = "new",
+    но в названии есть "Б/У" —
+    ставим "used".
+    """
 
-        return "used"
+    if value is not None:
 
-    if text in {
-        "any",
-        "любое",
-        "любая",
-        "будь яке",
-        "будь який",
-    }:
+        text = normalize(value)
 
-        return "any"
+        if text in {
+            "used",
+            "б у",
+            "бу",
+            "вживаний",
+            "вживана",
+            "вживане",
+            "бивший у використанні",
+            "second hand",
+            "pre owned",
+        }:
+
+            return "used"
+
+        if text in {
+            "any",
+            "любое",
+            "любая",
+            "будь яке",
+            "будь який",
+        }:
+
+            return "any"
+
+    if title:
+
+        title_normalized = normalize(title)
+
+        if re.search(r"\bб у\b", title_normalized):
+            return "used"
+
+        if re.match(r"^бу\b", title_normalized):
+            return "used"
+
+        if re.search(r"\bвживан", title_normalized):
+            return "used"
+
+        if re.search(r"\bвідновлен", title_normalized):
+            return "used"
+
+        if re.search(
+            r"\bsecond\s*hand\b|\bpre\s*owned\b",
+            title_normalized,
+        ):
+            return "used"
 
     return "new"

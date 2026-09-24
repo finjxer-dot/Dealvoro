@@ -4714,36 +4714,35 @@ async def admin_whois(message: Message):
 # ЗАПУСК
 # =========================================
 
+from database import (
+    init_db,
+    check_and_restore_database,
+    backup_database,
+)
+
 async def main():
 
+    # 1. Проверяем БД / восстанавливаем
+    check_and_restore_database()
+
+    # 2. Инициализация таблиц
     init_db()
 
-    print(
-        "Dealvoro запущен!"
-    )
+    # 3. Гарантийный бэкап
+    backup_database()
 
-    tracker_task = asyncio.create_task(
-        price_tracker_loop()
-    )
+    print("Dealvoro запущен!")
+
+    tracker_task = asyncio.create_task(price_tracker_loop())
 
     try:
-
-        await dp.start_polling(
-            bot
-        )
-
+        await dp.start_polling(bot)
     finally:
-
         tracker_task.cancel()
-
         try:
-
             await tracker_task
-
         except asyncio.CancelledError:
-
             pass
-
         await bot.session.close()
 
 

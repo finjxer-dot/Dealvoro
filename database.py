@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -7,12 +9,34 @@ from pathlib import Path
 # =========================================
 # ПУТИ
 # =========================================
+# DB_PATH можно переопределить через .env
+# Это позволяет вынести БД ЗА ПРЕДЕЛЫ папки
+# бота — тогда при переустановке кода
+# данные не пропадут.
 
 PROJECT_ROOT = Path(__file__).parent
 
 DATA_DIR = PROJECT_ROOT / "data"
 
-DATABASE_FILE = DATA_DIR / "dealvoro.db"
+# Если задан DB_PATH в .env — используем его.
+# Иначе — data/dealvoro.db внутри проекта.
+_env_db_path = os.getenv("DB_PATH")
+
+if _env_db_path:
+    DATABASE_FILE = Path(_env_db_path)
+else:
+    DATABASE_FILE = DATA_DIR / "dealvoro.db"
+
+# Бэкап рядом с основной БД
+BACKUP_FILE = DATABASE_FILE.parent / (
+    DATABASE_FILE.stem + "_backup" + DATABASE_FILE.suffix
+)
+
+# Создаём папку, если её нет
+DATABASE_FILE.parent.mkdir(
+    parents=True,
+    exist_ok=True,
+)
 
 DATA_DIR.mkdir(
     parents=True,
@@ -61,6 +85,311 @@ def get_connection():
     connection.row_factory = sqlite3.Row
 
     return connection
+
+
+# =========================================
+# БЭКАП И ВОССТАНОВЛЕНИЕ
+# =========================================
+
+def check_database_integrity() -> bool:
+    """
+    Проверяет целостность БД через
+    PRAGMA integrity_check.
+
+    Возвращает True, если БД целая.
+    """
+
+    if not DATABASE_FILE.exists():
+
+        return False
+
+    try:
+
+        connection = sqlite3.connect(
+            str(DATABASE_FILE)
+        )
+
+        cursor = connection.cursor()
+
+        cursor.execute("PRAGMA integrity_check")
+
+        result = cursor.fetchone()
+
+        connection.close()
+
+        if result and result[0] == "ok":
+
+            return True
+
+        print(f"[DB] Проверка целостности: {result}")
+
+        return False
+
+    except Exception as error:
+
+        print(f"[DB] Ошибка проверки целостности: {error}")
+
+        return False
+
+
+def backup_database():
+    """
+    Создаёт резервную копию БД через VACUUM INTO.
+
+    VACUUM INTO безопасен даже при активных
+    подключениях и всегда даёт консистентный
+    снимок.
+
+    Запись АТОМАРНАЯ:
+
+    1. Пишем во временный файл .tmp
+    2. Проверяем целостность .tmp
+    3. Только если целый — заменяем
+       старый бэкап новым.
+
+    Если что-то пошло не так — старый
+    бэкап остаётся НЕ ТРОНУТЫМ.
+    """
+
+    if not DATABASE_FILE.exists():
+
+        print("[DB] Основная БД не найдена — бэкап пропущен")
+
+        return False
+
+    # Временный файл рядом с бэкапом
+    temp_backup = BACKUP_FILE.parent / (
+        BACKUP_FILE.name + ".tmp"
+    )
+
+    try:
+
+        # Убираем старый временный, если остался
+        if temp_backup.exists():
+
+            try:
+                temp_backup.unlink()
+            except Exception:
+                pass
+
+        connection = sqlite3.connect(
+            str(DATABASE_FILE)
+        )
+
+        cursor = connection.cursor()
+
+        # VACUUM INTO пишет во временный файл
+        cursor.execute(
+            f"VACUUM INTO '{temp_backup}'"
+        )
+
+        connection.commit()
+
+        connection.close()
+
+        # =====================================
+        # ПРОВЕРКА ВРЕМЕННОГО БЭКАПА
+        # =====================================
+
+        if not temp_backup.exists():
+
+            print("[DB] Ошибка: временный бэкап не создан")
+
+            return False
+
+        test_connection = sqlite3.connect(
+            str(temp_backup)
+        )
+
+        test_cursor = test_connection.cursor()
+
+        test_cursor.execute("PRAGMA integrity_check")
+
+        result = test_cursor.fetchone()
+
+        test_connection.close()
+
+        if not result or result[0] != "ok":
+
+            print(f"[DB] Временный бэкап повреждён: {result}")
+
+            try:
+                temp_backup.unlink()
+            except Exception:
+                pass
+
+            return False
+
+        # =====================================
+        # АТОМАРНАЯ ЗАМЕНА СТАРОГО БЭКАПА
+        # =====================================
+
+        if BACKUP_FILE.exists():
+
+            BACKUP_FILE.unlink()
+
+        temp_backup.rename(BACKUP_FILE)
+
+        print(f"[DB] Бэкап создан: {BACKUP_FILE}")
+
+        return True
+
+    except Exception as error:
+
+        print(f"[DB] Ошибка создания бэкапа: {error}")
+
+        # Убираем временный файл
+        if temp_backup.exists():
+
+            try:
+                temp_backup.unlink()
+            except Exception:
+                pass
+
+        return False
+
+
+def restore_database() -> bool:
+    """
+    Восстанавливает БД из бэкапа,
+    если основная БД отсутствует
+    или повреждена.
+
+    Перед восстановлением ПРОВЕРЯЕТ
+    целостность бэкапа. Битый бэкап
+    НЕ БУДЕТ использован — чтобы не затереть
+    хорошую БД мусором.
+    """
+
+    if not BACKUP_FILE.exists():
+
+        print("[DB] Бэкап не найден — восстановление невозможно")
+
+        return False
+
+    # =====================================
+    # ПРОВЕРКА ЦЕЛОСТНОСТИ БЭКАПА
+    # =====================================
+
+    try:
+
+        test_connection = sqlite3.connect(
+            str(BACKUP_FILE)
+        )
+
+        test_cursor = test_connection.cursor()
+
+        test_cursor.execute("PRAGMA integrity_check")
+
+        result = test_cursor.fetchone()
+
+        test_connection.close()
+
+        if not result or result[0] != "ok":
+
+            print(f"[DB] Бэкап повреждён: {result}")
+
+            return False
+
+    except Exception as error:
+
+        print(f"[DB] Ошибка проверки бэкапа: {error}")
+
+        return False
+
+    # =====================================
+    # ВОССТАНОВЛЕНИЕ
+    # =====================================
+
+    try:
+
+        # Убираем битую основную БД, если осталась
+        if DATABASE_FILE.exists():
+
+            try:
+                DATABASE_FILE.unlink()
+            except Exception:
+                pass
+
+        shutil.copy2(
+            BACKUP_FILE,
+            DATABASE_FILE,
+        )
+
+        print(f"[DB] БД восстановлена из бэкапа: {BACKUP_FILE}")
+
+        return True
+
+    except Exception as error:
+
+        print(f"[DB] Ошибка восстановления: {error}")
+
+        return False
+
+
+def check_and_restore_database():
+    """
+    Вызывать в main() бота при старте.
+
+    Логика:
+
+    1. Если основной БД нет — пробуем
+       восстановить из бэкапа.
+    2. Если основной БД есть — проверяем
+       целостность.
+    3. Если целостность нарушена —
+       восстанавливаем из бэкапа.
+    4. Если БД в порядке, но БЭКАПА НЕТ —
+       создаём бэкап немедленно.
+    5. Если всё в порядке — ничего не делаем.
+    """
+
+    # =====================================
+    # 1. ОСНОВНОЙ БД НЕТ
+    # =====================================
+
+    if not DATABASE_FILE.exists():
+
+        print("[DB] Основная БД не найдена")
+
+        if BACKUP_FILE.exists():
+
+            print("[DB] Найден бэкап — восстанавливаем...")
+
+            restore_database()
+
+        else:
+
+            print("[DB] Бэкапа тоже нет — будет создана новая БД")
+
+        return
+
+    # =====================================
+    # 2. ПРОВЕРКА ЦЕЛОСТНОСТИ
+    # =====================================
+
+    if not check_database_integrity():
+
+        print("[DB] Целостность нарушена — восстанавливаем из бэкапа")
+
+        restore_database()
+
+        return
+
+    # =====================================
+    # 3. БД В ПОРЯДКЕ, НО БЭКАПА НЕТ —
+    #    СОЗДАЁМ БЭКАП НЕМЕДЛЕННО
+    # =====================================
+
+    if not BACKUP_FILE.exists():
+
+        print("[DB] Бэкап не найден — создаём")
+
+        backup_database()
+
+    else:
+
+        print("[DB] БД и бэкап на месте — всё ок")
 
 
 # =========================================
@@ -313,7 +642,7 @@ def init_db():
             ADD COLUMN language TEXT NOT NULL DEFAULT 'en'
             """
         )
-    
+
     # =====================================
     # МИГРАЦИЯ: last_notified_at
     # =====================================
@@ -335,7 +664,6 @@ def init_db():
             ADD COLUMN last_notified_at TEXT
             """
         )
-
 
     # =====================================
     # ИСТОРИЯ ЦЕН
@@ -397,6 +725,15 @@ def init_db():
     connection.commit()
 
     connection.close()
+
+    # =====================================
+    # АВТОБЭКАП ПОСЛЕ ИНИЦИАЛИЗАЦИИ
+    # =====================================
+
+    try:
+        backup_database()
+    except Exception as error:
+        print(f"[DB] Ошибка автобэкапа: {error}")
 
 
 # =========================================
@@ -480,17 +817,16 @@ def set_subscription(
     plan,
     expires_at=None,
 ):
+    """
+    Устанавливает подписку и делает бэкап.
+    """
 
     if plan not in SUBSCRIPTION_PLANS:
-
-        raise ValueError(
-            f"Недопустимый тариф: {plan}"
-        )
+        raise ValueError(f"Недопустимый тариф: {plan}")
 
     ensure_user_subscription(user_id)
 
     connection = get_connection()
-
     cursor = connection.cursor()
 
     cursor.execute(
@@ -502,16 +838,20 @@ def set_subscription(
             updated_at = CURRENT_TIMESTAMP
         WHERE user_id = ?
         """,
-        (
-            plan,
-            expires_at,
-            user_id,
-        ),
+        (plan, expires_at, user_id),
     )
 
     connection.commit()
-
     connection.close()
+
+    # =====================================
+    # СВЕЖИЙ БЭКАП ПОСЛЕ ИЗМЕНЕНИЯ ПОДПИСКИ
+    # =====================================
+
+    try:
+        backup_database()
+    except Exception as error:
+        print(f"[DB] Ошибка бэкапа после set_subscription: {error}")
 
 
 # =========================================
@@ -976,10 +1316,11 @@ def get_settings(user_id):
             "currency": "UAH",
             "country": "UA",
             "condition": "new",
-             "language": "en",
+            "language": "en",
         }
 
     return dict(row)
+
 
 # =========================================
 # ЯЗЫК ПОЛЬЗОВАТЕЛЯ
@@ -2282,6 +2623,7 @@ def update_price_tracker(
 
     return True
 
+
 def get_tracker_notification_info(tracker_id):
     """
     Возвращает время последнего уведомления
@@ -2317,6 +2659,7 @@ def get_tracker_notification_info(tracker_id):
         "current_price": row["current_price"],
         "previous_price": row["previous_price"],
     }
+
 
 # =========================================
 # ОБНОВИТЬ TARGET NOTIFIED
@@ -2473,6 +2816,7 @@ def get_price_history(
         for row in rows
     ]
 
+
 # =========================================
 # РЕФЕРАЛЫ
 # =========================================
@@ -2606,6 +2950,7 @@ def get_referrer(referred_id):
         return None
 
     return int(row["referrer_id"])
+
 
 # =========================================
 # ПОЛУЧИТЬ ПОСЛЕДНЮЮ ЦЕНУ
