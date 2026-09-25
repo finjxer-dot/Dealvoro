@@ -829,59 +829,44 @@ def contains_excluded_term(
     product,
     exclude_terms,
 ):
+    """
+    Проверяет exclude_terms.
+
+    ВАЖНО: проверяем ТОЛЬКО название (title).
+
+    Причина: если проверять description, то
+    описание смартфона может содержать
+    "в комплекте чехол" — и смартфон
+    отсеется по exclude-термину "чехол".
+    Это баг.
+
+    Title — главное поле. Если в названии
+    написано "Чехол для iPhone" — это точно
+    чехол, а не смартфон.
+    """
 
     if not exclude_terms:
-
         return False
 
-    title = get_product_title(
-        product
-    )
+    title = get_product_title(product)
 
-    vendor = get_product_vendor(
-        product
-    )
-
-    description = get_product_description(
-        product
-    )
+    if not title:
+        return False
 
     for term in exclude_terms:
 
-        if not isinstance(
-            term,
-            str,
-        ):
-
+        if not isinstance(term, str):
             continue
 
-        normalized_term = normalize(
-            term
-        )
+        normalized_term = normalize(term)
 
         if not normalized_term:
-
             continue
 
         if term_matches_text(
             normalized_term,
             title,
         ):
-
-            return True
-
-        if term_matches_text(
-            normalized_term,
-            vendor,
-        ):
-
-            return True
-
-        if term_matches_text(
-            normalized_term,
-            description,
-        ):
-
             return True
 
     return False
