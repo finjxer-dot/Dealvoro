@@ -725,6 +725,69 @@ TEXTS = {
         "uk": "❌ Тариф не знайдено.",
     },
 
+        "subscription_plans_header": {
+        "en": "📋 <b>Plans</b>",
+        "uk": "📋 <b>Тарифи</b>",
+    },
+    "subscription_plan_free": {
+        "en": (
+            "🆓 <b>Free</b>\n"
+            "• 5 searches / month\n"
+            "• 5 favorites\n"
+            "• 5 history"
+        ),
+        "uk": (
+            "🆓 <b>Free</b>\n"
+            "• 5 пошуків / місяць\n"
+            "• 5 обраних\n"
+            "• 5 історія"
+        ),
+    },
+    "subscription_plan_pro": {
+        "en": (
+            "⭐ <b>Pro — 100 Stars / 30 days</b>\n"
+            "• 15 searches / month\n"
+            "• 50 favorites\n"
+            "• 50 history\n"
+            "• 3 trackers\n"
+            "• Price drop alerts\n"
+            "• Sharp drop (20%+)\n"
+            "• 30 days price history"
+        ),
+        "uk": (
+            "⭐ <b>Pro — 100 Stars / 30 днів</b>\n"
+            "• 15 пошуків / місяць\n"
+            "• 50 обраних\n"
+            "• 50 історія\n"
+            "• 3 трекери\n"
+            "• Сповіщення про зниження\n"
+            "• Різке зниження (20%+)\n"
+            "• 30 днів історії цін"
+        ),
+    },
+    "subscription_plan_ultra": {
+        "en": (
+            "👑 <b>Ultra — 200 Stars / 30 days</b>\n"
+            "• 15 searches / day\n"
+            "• ∞ favorites\n"
+            "• ∞ history\n"
+            "• 25 trackers\n"
+            "• Price drop alerts\n"
+            "• Sharp drop (20%+)\n"
+            "• 90 days price history"
+        ),
+        "uk": (
+            "👑 <b>Ultra — 200 Stars / 30 днів</b>\n"
+            "• 15 пошуків / день\n"
+            "• ∞ обраних\n"
+            "• ∞ історія\n"
+            "• 25 трекерів\n"
+            "• Сповіщення про зниження\n"
+            "• Різке зниження (20%+)\n"
+            "• 90 днів історії цін"
+        ),
+    },
+
     # =====================================
     # ОТСЛЕЖИВАНИЕ ЦЕН
     # =====================================

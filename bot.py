@@ -530,28 +530,17 @@ def subscription_text(user_id: int) -> str:
         + history_text
         + "\n\n"
 
-        + "🆓 <b>Free</b>\n"
-        + "• 5 / month\n"
-        + "• 5 favorites\n"
-        + "• 5 history\n\n"
+        + t("subscription_plans_header", lang)
+        + "\n\n"
 
-        + "⭐ <b>Pro — 100 Stars / 30</b>\n"
-        + "• 15 / month\n"
-        + "• 50 favorites\n"
-        + "• 50 history\n"
-        + "• 3 trackers\n"
-        + "• Price drop alerts\n"
-        + "• Sharp drop (20%+)\n"
-        + "• 30 days price history\n\n"
+        + t("subscription_plan_free", lang)
+        + "\n\n"
 
-        + "👑 <b>Ultra — 200 Stars / 30</b>\n"
-        + "• 15 / day\n"
-        + "• ∞ favorites\n"
-        + "• ∞ history\n"
-        + "• 25 trackers\n"
-        + "• Price drop alerts\n"
-        + "• Sharp drop (20%+)\n"
-        + "• 90 days price history\n\n"
+        + t("subscription_plan_pro", lang)
+        + "\n\n"
+
+        + t("subscription_plan_ultra", lang)
+        + "\n\n"
 
         + t("subscription_choose", lang)
     )
