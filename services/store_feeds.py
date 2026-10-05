@@ -427,31 +427,66 @@ def download_feed(store, config):
 
 def load_store_products(store):
     """
-    Загружает готовый каталог магазина из .gz.
+    Загружает каталог магазина из .gz.
 
-    Если файла нет, скачивает XML и создаёт его.
+    Если .gz нет ИЛИ он устарел (старше CACHE_TTL) —
+    скачивает свежий XML.
     """
 
     config = FEEDS[store]
     cache = config["cache"]
 
+    # Проверяем, надо ли обновлять
+    need_refresh = True
+
     if cache.exists():
-        print(
-            f"{store}: загрузка готового каталога из .gz"
-        )
+        age = time.time() - cache.stat().st_mtime
 
-        with gzip.open(
-            cache,
-            "rt",
-            encoding="utf-8",
-        ) as file:
-            return json.load(file)
+        if age < CACHE_TTL:
+            need_refresh = False
+            print(
+                f"{store}: кэш свежий "
+                f"({int(age)} сек < {CACHE_TTL} сек)"
+            )
+        else:
+            print(
+                f"{store}: кэш устарел "
+                f"({int(age)} сек > {CACHE_TTL} сек) — обновляю"
+            )
 
-    return download_feed(
-        store,
-        config,
-    )
+    if need_refresh:
+        try:
+            download_feed(store, config)
+        except Exception as error:
+            print(f"{store}: ошибка скачивания: {error}")
 
+            # Если скачать не удалось, но .gz есть — используем старый
+            if cache.exists():
+                print(f"{store}: использую старый кэш")
+            else:
+                return []
+
+    # Читаем .gz
+    with gzip.open(cache, "rt", encoding="utf-8") as file:
+        return json.load(file)
+
+def refresh_all_feeds():
+    """
+    Скачивает свежие XML-фиды для всех магазинов
+    и пересобирает .gz-кэши.
+
+    Вызывается при старте бота и раз в 12 часов.
+    """
+    print("[FEEDS] Начинаю обновление фидов...")
+
+    for store, config in FEEDS.items():
+        try:
+            print(f"[FEEDS] Обновляю {store}...")
+            download_feed(store, config)
+        except Exception as error:
+            print(f"[FEEDS] Ошибка обновления {store}: {error}")
+
+    print("[FEEDS] Обновление фидов завершено")
 
 def load_additional_products():
     """

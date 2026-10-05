@@ -4547,6 +4547,45 @@ async def price_tracker_loop():
             3600
         )
 
+async def feeds_refresh_loop():
+    """
+    Обновляет все фиды каждые 12 часов:
+    - магазины из FEEDS (TOUCH, INTERTOP, ...)
+    - Answear (отдельный парсер)
+    """
+
+    while True:
+        try:
+            print("[FEEDS] Начинаю обновление всех фидов...")
+
+            # =====================================
+            # 1. Магазины из FEEDS
+            # =====================================
+
+            try:
+                from services.store_feeds import refresh_all_feeds
+                await asyncio.to_thread(refresh_all_feeds)
+            except Exception as error:
+                print(f"[FEEDS] Ошибка обновления FEEDS: {error}")
+
+            # =====================================
+            # 2. Answear
+            # =====================================
+
+            try:
+                from answear_parser import refresh_answear
+                await asyncio.to_thread(refresh_answear)
+            except Exception as error:
+                print(f"[FEEDS] Ошибка обновления Answear: {error}")
+
+            print("[FEEDS] Все фиды обновлены (следующее — через 12 ч)")
+
+        except Exception as error:
+            print(f"[FEEDS] Общая ошибка: {error}")
+
+        # 12 часов = 43200 секунд
+        await asyncio.sleep(43200)
+
 # =========================================
 # АДМИН-КОМАНДЫ
 # =========================================
@@ -4722,16 +4761,47 @@ async def main():
 
     print("Dealvoro запущен!")
 
+    # =====================================
+    # ОБНОВЛЕНИЕ ФИДОВ ПРИ СТАРТЕ
+    # =====================================
+
+    try:
+        print("[FEEDS] Первичное обновление фидов...")
+
+        from services.store_feeds import refresh_all_feeds
+        await asyncio.to_thread(refresh_all_feeds)
+
+        from answear_parser import refresh_answear
+        await asyncio.to_thread(refresh_answear)
+
+        print("[FEEDS] Первичное обновление завершено")
+
+    except Exception as error:
+        print(f"[FEEDS] Ошибка первичного обновления: {error}")
+
+    # =====================================
+    # ФОНОВЫЕ ЗАДАЧИ
+    # =====================================
+
     tracker_task = asyncio.create_task(price_tracker_loop())
+    feeds_task = asyncio.create_task(feeds_refresh_loop())
 
     try:
         await dp.start_polling(bot)
     finally:
         tracker_task.cancel()
+        feeds_task.cancel()
+
         try:
             await tracker_task
         except asyncio.CancelledError:
             pass
+
+        try:
+            await feeds_task
+        except asyncio.CancelledError:
+            pass
+
         await bot.session.close()
 
 
