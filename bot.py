@@ -4553,6 +4553,7 @@ async def feeds_refresh_loop():
     - магазины из FEEDS (TOUCH, INTERTOP, ...)
     - Answear (отдельный парсер)
     """
+    await asyncio.sleep(30)
 
     while True:
         try:
@@ -4760,25 +4761,7 @@ async def main():
     backup_database()
 
     print("Dealvoro запущен!")
-
-    # =====================================
-    # ОБНОВЛЕНИЕ ФИДОВ ПРИ СТАРТЕ
-    # =====================================
-
-    try:
-        print("[FEEDS] Первичное обновление фидов...")
-
-        from services.store_feeds import refresh_all_feeds
-        await asyncio.to_thread(refresh_all_feeds)
-
-        from answear_parser import refresh_answear
-        await asyncio.to_thread(refresh_answear)
-
-        print("[FEEDS] Первичное обновление завершено")
-
-    except Exception as error:
-        print(f"[FEEDS] Ошибка первичного обновления: {error}")
-
+    
     # =====================================
     # ФОНОВЫЕ ЗАДАЧИ
     # =====================================
