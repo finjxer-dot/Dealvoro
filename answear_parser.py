@@ -67,27 +67,134 @@ def download_feed():
 
 def parse_feed(xml_data):
     """
-    Разбирает XML и возвращает список товаров
-    в формате, совместимом с search.py.
+    Разбирает XML Answear потоково (iterparse).
+    Это не грузит весь XML в память сразу.
     """
 
-    print("🔍 Разбираю XML...")
+    print("🔍 Разбираю XML (потоково)...")
 
-    root = ET.fromstring(xml_data)
+    import io
 
     # =====================================
-    # КАТЕГОРИИ
+    # КАТЕГОРИИ — отдельным проходом
     # =====================================
 
     categories = {}
 
-    for category in root.findall(".//categories/category"):
-        category_id = category.get("id")
+    context = ET.iterparse(
+        io.BytesIO(xml_data),
+        events=("end",),
+    )
 
-        if category_id:
-            categories[category_id] = category.text or ""
+    for _, element in context:
+
+        tag = element.tag.split("}")[-1].lower()
+
+        if tag == "category":
+            category_id = element.get("id")
+
+            if category_id:
+                categories[category_id] = element.text or ""
+
+            element.clear()
+
+        elif tag == "categories":
+            # Категории закончились — выходим
+            break
 
     print(f"📂 Категорий найдено: {len(categories)}")
+
+    # =====================================
+    # ТОВАРЫ — отдельным проходом
+    # =====================================
+
+    print("📦 Читаю товары...")
+
+    products = []
+    count = 0
+
+    context = ET.iterparse(
+        io.BytesIO(xml_data),
+        events=("end",),
+    )
+
+    for _, element in context:
+
+        tag = element.tag.split("}")[-1].lower()
+
+        if tag != "offer":
+            continue
+
+        offer = element
+
+        def get_text(t):
+            el = offer.find(t)
+
+            if el is None or el.text is None:
+                return ""
+
+            return el.text.strip()
+
+        category_id = get_text("categoryId")
+        name = get_text("name")
+        price_text = get_text("price")
+        url = get_text("url")
+
+        if name and price_text and url:
+
+            try:
+                price = float(price_text)
+            except (TypeError, ValueError):
+                price = None
+
+            if price is not None:
+
+                old_price_text = get_text("oldprice")
+
+                try:
+                    old_price = (
+                        float(old_price_text)
+                        if old_price_text
+                        else None
+                    )
+                except (TypeError, ValueError):
+                    old_price = None
+
+                product = {
+                    "id": offer.get("id"),
+                    "name": name,
+                    "title": name,
+                    "store": "Answear",
+                    "price": price,
+                    "old_price": old_price,
+                    "currency": get_text("currencyId") or "UAH",
+                    "condition": "new",
+                    "description": get_text("description"),
+                    "picture": get_text("picture"),
+                    "url": url,
+                    "canonical_url": url,
+                    "vendor": get_text("vendor"),
+                    "category_id": category_id,
+                    "category": categories.get(category_id, ""),
+                    "rating": None,
+                    "reviews": None,
+                    "match_score": 0,
+                    "deal_score": 0,
+                    "discount": 0,
+                }
+
+                products.append(product)
+
+        element.clear()
+
+        count += 1
+
+        if count % 20000 == 0:
+            print(f"   Обработано: {count}")
+
+    print(f"✅ Товаров сохранено: {len(products)}")
+
+    return products
 
     # =====================================
     # ТОВАРЫ
@@ -200,16 +307,11 @@ def save_products(products):
 # =========================================
 
 def refresh_answear():
-    """
-    Скачивает, парсит и сохраняет Answear.
-
-    Вызывается из bot.py через
-    asyncio.to_thread(refresh_answear).
-    """
-
     print("[ANSWEAR] Начинаю обновление...")
 
     xml_data = download_feed()
+
+    print(f"[ANSWEAR] XML в памяти: {len(xml_data) / 1024 / 1024:.2f} MB")
 
     products = parse_feed(xml_data)
 

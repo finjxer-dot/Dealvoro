@@ -4553,7 +4553,7 @@ async def feeds_refresh_loop():
     - магазины из FEEDS (TOUCH, INTERTOP, ...)
     - Answear (отдельный парсер)
     """
-    await asyncio.sleep(30)
+    await asyncio.sleep(120)
 
     while True:
         try:
