@@ -386,7 +386,7 @@ def download_feed(store, config):
 
     response = requests.get(
         url,
-        timeout=600,
+        timeout=1800 if store == "AliExpress" else 600,
         stream=True,
     )
 

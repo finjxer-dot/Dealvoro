@@ -4549,28 +4549,52 @@ async def price_tracker_loop():
 
 async def feeds_refresh_loop():
     """
-    Обновляет все фиды каждые 12 часов:
-    - магазины из FEEDS (TOUCH, INTERTOP, ...)
+    Обновляет фиды каждые 12 часов:
+    - магазины из FEEDS (TOUCH, INTERTOP, iCases, Будинок)
     - Answear (отдельный парсер)
+
+    AliExpress обновляется ОТДЕЛЬНО — раз в 3 дня,
+    потому что его фид слишком тяжёлый (~690 MB).
     """
     await asyncio.sleep(120)
 
+    # Счётчик циклов для AliExpress
+    cycle_counter = 0
+
     while True:
         try:
-            print("[FEEDS] Начинаю обновление всех фидов...")
+            print("[FEEDS] Начинаю обновление фидов...")
 
             # =====================================
-            # 1. Магазины из FEEDS
+            # 1. Магазины из FEEDS (кроме AliExpress)
             # =====================================
 
             try:
-                from services.store_feeds import refresh_all_feeds
-                await asyncio.to_thread(refresh_all_feeds)
+                from services.store_feeds import FEEDS, download_feed
+
+                for store, config in FEEDS.items():
+
+                    # AliExpress — отдельно
+                    if store == "AliExpress":
+                        continue
+
+                    try:
+                        print(f"[FEEDS] Обновляю {store}...")
+
+                        await asyncio.to_thread(
+                            download_feed,
+                            store,
+                            config,
+                        )
+
+                    except Exception as error:
+                        print(f"[FEEDS] Ошибка {store}: {error}")
+
             except Exception as error:
                 print(f"[FEEDS] Ошибка обновления FEEDS: {error}")
 
             # =====================================
-            # 2. Answear
+            # 2. Answear — каждые 12 часов
             # =====================================
 
             try:
@@ -4579,6 +4603,33 @@ async def feeds_refresh_loop():
             except Exception as error:
                 print(f"[FEEDS] Ошибка обновления Answear: {error}")
 
+            # =====================================
+            # 3. AliExpress — раз в 3 дня (6 циклов)
+            # =====================================
+
+            cycle_counter += 1
+
+            if cycle_counter >= 6:
+
+                try:
+                    print("[FEEDS] Обновляю AliExpress (раз в 3 дня)...")
+
+                    from services.store_feeds import FEEDS, download_feed
+
+                    config = FEEDS.get("AliExpress")
+
+                    if config:
+                        await asyncio.to_thread(
+                            download_feed,
+                            "AliExpress",
+                            config,
+                        )
+
+                    cycle_counter = 0
+
+                except Exception as error:
+                    print(f"[FEEDS] Ошибка обновления AliExpress: {error}")
+
             print("[FEEDS] Все фиды обновлены (следующее — через 12 ч)")
 
         except Exception as error:
@@ -4586,7 +4637,7 @@ async def feeds_refresh_loop():
 
         # 12 часов = 43200 секунд
         await asyncio.sleep(43200)
-
+ 
 # =========================================
 # АДМИН-КОМАНДЫ
 # =========================================
