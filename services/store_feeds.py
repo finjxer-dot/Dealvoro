@@ -2,7 +2,7 @@ import gzip
 import json
 import os
 import time
-import xml.etree.ElementTree as ET
+from lxml import etree as ET
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -43,6 +43,11 @@ FEEDS = {
     "Будинок Іграшок UA": {
         "url_env": "BUDYNOK_IGRASHOK_FEED_URL",
         "cache": CACHE_DIR / "budynok_igrashok_products.json.gz",
+    },
+
+    "AliExpress": {
+        "url_env": "ALIEXPRESS_FEED_URL",
+        "cache": CACHE_DIR / "aliexpress_products.json.gz",
     },
 }
 
@@ -155,6 +160,9 @@ def get_tracked_url(url):
 def parse_offer(offer, store):
     """
     Преобразует offer из XML в единый формат Dealvoro.
+
+    Для AliExpress — минимум полей (без description,
+    params, keywords), чтобы уменьшить размер фида.
     """
 
     name = get_first_text(
@@ -162,14 +170,6 @@ def parse_offer(offer, store):
         [
             "name",
             "title",
-        ],
-    )
-
-    description = get_first_text(
-        offer,
-        [
-            "description",
-            "description_ua",
         ],
     )
 
@@ -196,7 +196,11 @@ def parse_offer(offer, store):
                 "currency",
             ],
         )
-        or "UAH"
+        or (
+            "USD"
+            if store == "AliExpress"
+            else "UAH"
+        )
     )
 
     url = get_first_text(
@@ -225,18 +229,6 @@ def parse_offer(offer, store):
         offer,
         [
             "categoryId",
-        ],
-    )
-
-    params = get_all_text(
-        offer,
-        "param",
-    )
-
-    keywords = get_first_text(
-        offer,
-        [
-            "keywords",
         ],
     )
 
@@ -276,6 +268,56 @@ def parse_offer(offer, store):
     if not name:
         return None
 
+    # =====================================
+    # ДЛЯ ALIEXPRESS — МИНИМУМ ПОЛЕЙ
+    # =====================================
+
+    if store == "AliExpress":
+
+        return {
+            "name": name,
+            "title": name,
+            "store": store,
+            "price": price,
+            "old_price": old_price,
+            "currency": currency,
+            "condition": "new",
+            "vendor": vendor,
+            "category": category_id,
+            "picture": (
+                pictures[0]
+                if pictures
+                else ""
+            ),
+            "url": url,
+            "canonical_url": get_tracked_url(url),
+            "in_stock": in_stock,
+        }
+
+    # =====================================
+    # ДЛЯ ОСТАЛЬНЫХ — ПОЛНЫЙ ФОРМАТ
+    # =====================================
+
+    description = get_first_text(
+        offer,
+        [
+            "description",
+            "description_ua",
+        ],
+    )
+
+    params = get_all_text(
+        offer,
+        "param",
+    )
+
+    keywords = get_first_text(
+        offer,
+        [
+            "keywords",
+        ],
+    )
+
     extra_text = " ".join(
         [
             description,
@@ -283,10 +325,6 @@ def parse_offer(offer, store):
             " ".join(params),
         ]
     ).strip()
-
-    canonical_url = get_tracked_url(
-        url
-    )
 
     return {
         "name": name,
@@ -307,7 +345,7 @@ def parse_offer(offer, store):
             else ""
         ),
         "url": url,
-        "canonical_url": canonical_url,
+        "canonical_url": get_tracked_url(url),
         "match_score": 0,
         "deal_score": 0,
         "discount": 0,
@@ -318,7 +356,10 @@ def parse_offer(offer, store):
 def download_feed(store, config):
     """
     Скачивает XML-фид магазина,
-    парсит его и сохраняет gzip-кэш.
+    парсит его ПОТОКОВО и сохраняет gzip-кэш.
+
+    Товары НЕ накапливаются в памяти —
+    каждый сразу пишется в .gz как отдельный JSON.
     """
 
     raw_url = os.getenv(
@@ -345,7 +386,7 @@ def download_feed(store, config):
 
     response = requests.get(
         url,
-        timeout=180,
+        timeout=600,
         stream=True,
     )
 
@@ -356,7 +397,16 @@ def download_feed(store, config):
         / f"{store.lower()}_feed.xml"
     )
 
+    temp_gz = (
+        CACHE_DIR
+        / f"{store.lower()}_products.json.gz.tmp"
+    )
+
     try:
+
+        # =====================================
+        # 1. СКАЧИВАЕМ XML ВО ВРЕМЕННЫЙ ФАЙЛ
+        # =====================================
 
         with open(
             temp_xml,
@@ -370,59 +420,88 @@ def download_feed(store, config):
                 if chunk:
                     file.write(chunk)
 
-        products = []
+        # =====================================
+        # 2. ПОТОКОВО ПАРСИМ И ПИШЕМ В .GZ
+        # =====================================
 
-        context = ET.iterparse(
-            temp_xml,
-            events=("end",),
-        )
-
-        for _, element in context:
-
-            tag = clean_tag(
-                element.tag
-            ).lower()
-
-            if tag != "offer":
-                continue
-
-            product = parse_offer(
-                element,
-                store,
-            )
-
-            if product:
-                products.append(
-                    product
-                )
-
-            element.clear()
+        count = 0
 
         with gzip.open(
-            config["cache"],
+            temp_gz,
             "wt",
             encoding="utf-8",
-        ) as file:
+        ) as gz_file:
 
-            json.dump(
-                products,
-                file,
-                ensure_ascii=False,
+            gz_file.write("[")
+
+            first = True
+
+            context = ET.iterparse(
+                temp_xml,
+                events=("end",),
+                tag="offer",
+                recover=True,
             )
+
+            for _, element in context:
+
+                product = parse_offer(
+                    element,
+                    store,
+                )
+
+                element.clear()
+
+                if not product:
+                    continue
+
+                # Запятая перед элементом, кроме первого
+                if not first:
+                    gz_file.write(",")
+
+                first = False
+
+                json.dump(
+                    product,
+                    gz_file,
+                    ensure_ascii=False,
+                )
+
+                count += 1
+
+                # Лог каждые 100 000
+                if count % 100000 == 0:
+                    print(
+                        f"{store}: "
+                        f"обработано {count}"
+                    )
+
+            gz_file.write("]")
+
+        # =====================================
+        # 3. ЗАМЕНЯЕМ СТАРЫЙ .GZ НОВЫМ
+        # =====================================
+
+        if config["cache"].exists():
+            config["cache"].unlink()
+
+        temp_gz.rename(config["cache"])
 
         print(
             f"{store}: "
-            f"сохранено товаров: "
-            f"{len(products)}"
+            f"сохранено товаров: {count}"
         )
 
-        return products
+        return count
 
     finally:
 
-        temp_xml.unlink(
-            missing_ok=True
-        )
+        # Чистим временные файлы
+        if temp_xml.exists():
+            temp_xml.unlink()
+
+        if temp_gz.exists():
+            temp_gz.unlink()
 
 
 def load_store_products(store):
@@ -470,6 +549,7 @@ def load_store_products(store):
     with gzip.open(cache, "rt", encoding="utf-8") as file:
         return json.load(file)
 
+
 def refresh_all_feeds():
     """
     Скачивает свежие XML-фиды для всех магазинов
@@ -487,6 +567,7 @@ def refresh_all_feeds():
             print(f"[FEEDS] Ошибка обновления {store}: {error}")
 
     print("[FEEDS] Обновление фидов завершено")
+
 
 def load_additional_products():
     """

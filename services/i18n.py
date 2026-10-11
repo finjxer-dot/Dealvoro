@@ -229,11 +229,13 @@ TEXTS = {
     "search_searching": {
         "en": (
             "🔎 <b>Searching for matching offers...</b>\n\n"
-            "⏳ Checking products by your parameters."
+            "⏳ Checking products by your parameters.\n\n"
+            "⏱ This may take up to 5 minutes."
         ),
         "uk": (
             "🔎 <b>Шукаю відповідні пропозиції...</b>\n\n"
-            "⏳ Перевіряю товари за твоїми параметрами."
+            "⏳ Перевіряю товари за твоїми параметрами.\n\n"
+            "⏱ Це може зайняти до 5 хвилин."
         ),
     },
     "search_not_found": {
