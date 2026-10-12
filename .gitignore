@@ -1,3 +1,4 @@
+cat > .gitignore << 'EOF'
 .env
 .venv/
 __pycache__/
@@ -7,6 +8,7 @@ __pycache__/
 # Файлы фидов — большие, не нужны в Git
 data/feeds/*.gz
 *.json.gz
+answear_products.json
 
 # База данных
 data/dealvoro.db
