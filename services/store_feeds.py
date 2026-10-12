@@ -355,11 +355,11 @@ def parse_offer(offer, store):
 
 def download_feed(store, config):
     """
-    Скачивает XML-фид магазина,
-    парсит его ПОТОКОВО и сохраняет gzip-кэш.
+    Скачивает XML-фид магазина и парсит его ПОТОКОВО,
+    БЕЗ сохранения XML на диск.
 
-    Товары НЕ накапливаются в памяти —
-    каждый сразу пишется в .gz как отдельный JSON.
+    Это экономит место — особенно для AliExpress,
+    где распакованный XML занимает 7+ GB.
     """
 
     raw_url = os.getenv(
@@ -384,6 +384,37 @@ def download_feed(store, config):
         f"{store}: скачивание XML..."
     )
 
+    # =====================================
+    # ЧИСТКА СТАРЫХ ВРЕМЕННЫХ ФАЙЛОВ
+    # =====================================
+
+    for old_file in CACHE_DIR.glob("*_feed.xml*"):
+
+        try:
+
+            size = (
+                old_file.stat().st_size
+                / 1024
+                / 1024
+            )
+
+            print(
+                f"[CLEANUP] Удаляю "
+                f"{old_file.name} "
+                f"({size:.0f} MB)"
+            )
+
+            old_file.unlink()
+
+        except Exception:
+
+            pass
+
+    temp_gz = (
+        CACHE_DIR
+        / f"{store.lower()}_products.json.gz.tmp"
+    )
+
     response = requests.get(
         url,
         timeout=1800 if store == "AliExpress" else 600,
@@ -392,37 +423,7 @@ def download_feed(store, config):
 
     response.raise_for_status()
 
-    temp_xml = (
-        CACHE_DIR
-        / f"{store.lower()}_feed.xml"
-    )
-
-    temp_gz = (
-        CACHE_DIR
-        / f"{store.lower()}_products.json.gz.tmp"
-    )
-
     try:
-
-        # =====================================
-        # 1. СКАЧИВАЕМ XML ВО ВРЕМЕННЫЙ ФАЙЛ
-        # =====================================
-
-        with open(
-            temp_xml,
-            "wb",
-        ) as file:
-
-            for chunk in response.iter_content(
-                chunk_size=1024 * 1024
-            ):
-
-                if chunk:
-                    file.write(chunk)
-
-        # =====================================
-        # 2. ПОТОКОВО ПАРСИМ И ПИШЕМ В .GZ
-        # =====================================
 
         count = 0
 
@@ -436,8 +437,12 @@ def download_feed(store, config):
 
             first = True
 
+            # =====================================
+            # lxml читает из HTTP-потока напрямую
+            # =====================================
+
             context = ET.iterparse(
-                temp_xml,
+                response.raw,
                 events=("end",),
                 tag="offer",
                 recover=True,
@@ -455,7 +460,6 @@ def download_feed(store, config):
                 if not product:
                     continue
 
-                # Запятая перед элементом, кроме первого
                 if not first:
                     gz_file.write(",")
 
@@ -469,8 +473,8 @@ def download_feed(store, config):
 
                 count += 1
 
-                # Лог каждые 100 000
                 if count % 100000 == 0:
+
                     print(
                         f"{store}: "
                         f"обработано {count}"
@@ -479,7 +483,7 @@ def download_feed(store, config):
             gz_file.write("]")
 
         # =====================================
-        # 3. ЗАМЕНЯЕМ СТАРЫЙ .GZ НОВЫМ
+        # ЗАМЕНЯЕМ СТАРЫЙ .GZ НОВЫМ
         # =====================================
 
         if config["cache"].exists():
@@ -496,12 +500,12 @@ def download_feed(store, config):
 
     finally:
 
-        # Чистим временные файлы
-        if temp_xml.exists():
-            temp_xml.unlink()
-
         if temp_gz.exists():
-            temp_gz.unlink()
+
+            try:
+                temp_gz.unlink()
+            except Exception:
+                pass
 
 
 def load_store_products(store):
@@ -515,38 +519,52 @@ def load_store_products(store):
     config = FEEDS[store]
     cache = config["cache"]
 
-    # Проверяем, надо ли обновлять
     need_refresh = True
 
     if cache.exists():
+
         age = time.time() - cache.stat().st_mtime
 
         if age < CACHE_TTL:
+
             need_refresh = False
+
             print(
                 f"{store}: кэш свежий "
                 f"({int(age)} сек < {CACHE_TTL} сек)"
             )
+
         else:
+
             print(
                 f"{store}: кэш устарел "
                 f"({int(age)} сек > {CACHE_TTL} сек) — обновляю"
             )
 
     if need_refresh:
+
         try:
+
             download_feed(store, config)
+
         except Exception as error:
+
             print(f"{store}: ошибка скачивания: {error}")
 
-            # Если скачать не удалось, но .gz есть — используем старый
             if cache.exists():
+
                 print(f"{store}: использую старый кэш")
+
             else:
+
                 return []
 
-    # Читаем .gz
-    with gzip.open(cache, "rt", encoding="utf-8") as file:
+    with gzip.open(
+        cache,
+        "rt",
+        encoding="utf-8",
+    ) as file:
+
         return json.load(file)
 
 
@@ -557,13 +575,19 @@ def refresh_all_feeds():
 
     Вызывается при старте бота и раз в 12 часов.
     """
+
     print("[FEEDS] Начинаю обновление фидов...")
 
     for store, config in FEEDS.items():
+
         try:
+
             print(f"[FEEDS] Обновляю {store}...")
+
             download_feed(store, config)
+
         except Exception as error:
+
             print(f"[FEEDS] Ошибка обновления {store}: {error}")
 
     print("[FEEDS] Обновление фидов завершено")
@@ -584,9 +608,7 @@ def load_additional_products():
         try:
 
             products.extend(
-                load_store_products(
-                    store
-                )
+                load_store_products(store)
             )
 
         except Exception as error:

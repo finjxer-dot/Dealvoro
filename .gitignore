@@ -3,6 +3,18 @@
 __pycache__/
 *.pyc
 .DS_Store
-answear_products.jsondata/dealvoro.db
-answear_products.json
+
+# Файлы фидов — большие, не нужны в Git
+data/feeds/*.gz
+*.json.gz
+
+# База данных
 data/dealvoro.db
+data/dealvoro_backup.db
+
+# Временные файлы фидов
+data/feeds/*.xml
+data/feeds/*.tmp
+
+# Логи
+*.log
